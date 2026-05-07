@@ -40,41 +40,27 @@
   @keyframes pulse { 0% { transform: scale(0.6); opacity: 0.6; } 100% { transform: scale(1.3); opacity: 0; } }
   .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #6b8a5e; display: inline-block; animation: blink 2s ease-in-out infinite; }
   @keyframes blink { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+  .bar-fill { transition: width 0.6s ease-out; }
 </style>
 </head>
 <body>
 <div id="root">
-  <div id="boot">
-    <div style="text-align:center">
-      <div class="boot-pulse" style="margin: 0 auto 16px"></div>
-      <p class="display" style="font-size: 1.25rem;">Starting your studio...</p>
-    </div>
-  </div>
+  <div id="boot"><div style="text-align:center"><div class="boot-pulse" style="margin: 0 auto 16px"></div><p class="display" style="font-size: 1.25rem;">Starting your studio...</p></div></div>
 </div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback, useMemo } = React;
 
-/* ════════════════════════════  CONFIG  ════════════════════════════
- *  Paste your Supabase project URL and anon public key below.
- *  Get them from: Supabase project → Settings → API
- *  Both values are SAFE to make public (Row Level Security protects data).
- * ═══════════════════════════════════════════════════════════════ */
+/* ════════════════════════════  CONFIG  ════════════════════════════ */
 const SUPABASE_URL = 'https://zgghvwoxkkhrxfqmyyzn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnZ2h2d294a2tocnhmcW15eXpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxMjc4NjAsImV4cCI6MjA5MzcwMzg2MH0._gsNIrI4aPFghdpXDp_V1x8L6lJqJqptOzd6_zs_gjU';
 
 const sb = (SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY.length > 50)
-  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-  : null;
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 /* ════════════════════════════  ICONS  ════════════════════════════ */
 const Icon = ({ size = 24, color, children, style, ...rest }) =>
-  React.createElement('svg', {
-    width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
-    stroke: color || 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
-    style, ...rest
-  }, children);
-
+  React.createElement('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color || 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', style, ...rest }, children);
 const I = (paths) => (props) => <Icon {...props}>{paths}</Icon>;
 
 const LayoutDashboard = I(<><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></>);
@@ -84,6 +70,7 @@ const Briefcase = I(<><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><p
 const Calendar = I(<><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></>);
 const Table2 = I(<path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>);
 const Lightbulb = I(<><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></>);
+const BarChart3 = I(<><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></>);
 const Plus = I(<><path d="M5 12h14"/><path d="M12 5v14"/></>);
 const X = I(<><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>);
 const Edit2 = I(<><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></>);
@@ -97,6 +84,7 @@ const MessageSquare = I(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a
 const TrendingUp = I(<><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></>);
 const Sparkles = I(<><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></>);
 const ChevronRight = I(<path d="m9 18 6-6-6-6"/>);
+const ChevronLeft = I(<path d="m15 18-6-6 6-6"/>);
 const Search = I(<><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>);
 const Instagram = I(<><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></>);
 const Facebook = I(<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>);
@@ -108,20 +96,17 @@ const Flag = I(<><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4
 const FileSpreadsheet = I(<><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></>);
 const LogOut = I(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></>);
 const Mail = I(<><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></>);
+const Folder = I(<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>);
+const Heart = I(<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/>);
+const Eye = I(<><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></>);
 
 /* ════════════════════════════  CONSTANTS  ════════════════════════════ */
-const TABLES = ['team', 'clients', 'tasks', 'posts', 'sheets', 'strategies', 'comms'];
-
+const TABLES = ['teams', 'team', 'clients', 'tasks', 'posts', 'sheets', 'strategies', 'comms', 'instagram_reports'];
 const STATUS_COLORS = {
-  todo: { bg: '#f4ede0', text: '#6b6358' },
-  progress: { bg: '#fde8d6', text: '#a04a1a' },
-  review: { bg: '#e6dcf2', text: '#5a3d8c' },
-  done: { bg: '#dde9d9', text: '#3d5a36' },
-  blocked: { bg: '#f5d8d4', text: '#8c2e22' },
+  todo: { bg: '#f4ede0', text: '#6b6358' }, progress: { bg: '#fde8d6', text: '#a04a1a' },
+  review: { bg: '#e6dcf2', text: '#5a3d8c' }, done: { bg: '#dde9d9', text: '#3d5a36' }, blocked: { bg: '#f5d8d4', text: '#8c2e22' },
 };
-
 const PRIORITY_COLORS = { low: '#a8a094', medium: '#d97a3e', high: '#c43d2c' };
-
 const PLATFORMS = [
   { id: 'instagram', name: 'Instagram', icon: Instagram, color: '#c43d6e' },
   { id: 'facebook', name: 'Facebook', icon: Facebook, color: '#3d6bc4' },
@@ -129,28 +114,44 @@ const PLATFORMS = [
   { id: 'twitter', name: 'X / Twitter', icon: Twitter, color: '#1a1814' },
   { id: 'youtube', name: 'YouTube', icon: Youtube, color: '#c43d2c' },
 ];
+const TEAM_COLORS = ['#c43d6e', '#3d6bc4', '#8b66c4', '#3d5a36', '#a04a1a', '#1a5490', '#c43d2c', '#6b6358'];
+
+const DEFAULT_TEAMS = [
+  { name: 'Design Team', color: '#c43d6e', sort_order: 1 },
+  { name: 'Video Editing Team', color: '#3d6bc4', sort_order: 2 },
+  { name: 'AI Team', color: '#8b66c4', sort_order: 3 },
+  { name: 'Content Team', color: '#3d5a36', sort_order: 4 },
+  { name: 'Shoot Team', color: '#a04a1a', sort_order: 5 },
+];
 
 /* ════════════════════════════  UTILS  ════════════════════════════ */
 const today = () => new Date().toISOString().split('T')[0];
 const formatDate = (d) => !d ? '—' : new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 const formatDateTime = (d) => !d ? '—' : new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const formatMonth = (m) => { if (!m) return '—'; const [y, mo] = m.split('-'); return new Date(y, mo - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); };
+const currentMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 
-// snake_case (database) <-> camelCase (UI) conversion
 const toCamel = (obj) => {
   if (!obj || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map(toCamel);
   const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = v;
-  }
+  for (const [k, v] of Object.entries(obj)) out[k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = v;
   return out;
 };
 const toSnake = (obj) => {
   const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k.replace(/[A-Z]/g, c => '_' + c.toLowerCase())] = v;
-  }
+  for (const [k, v] of Object.entries(obj)) out[k.replace(/[A-Z]/g, c => '_' + c.toLowerCase())] = v;
   return out;
+};
+
+const isInPeriod = (dateStr, period) => {
+  if (period === 'all') return true;
+  if (!dateStr) return false;
+  const d = new Date(dateStr); const now = new Date();
+  const days = period === 'week' ? 7 : period === 'month' ? 30 : period === 'quarter' ? 90 : 0;
+  if (!days) return true;
+  const cutoff = new Date(now); cutoff.setDate(now.getDate() - days);
+  return d >= cutoff;
 };
 
 /* ════════════════════════════  DATA LAYER  ════════════════════════════ */
@@ -159,43 +160,31 @@ const fetchTable = async (table) => {
   if (error) { console.error(`fetch ${table}:`, error); return []; }
   return data.map(toCamel);
 };
-
 const upsertItem = async (table, item, userId) => {
   const { id, createdAt, ...rest } = item;
-  // Empty strings on FK fields must be null
   const cleaned = {};
   for (const [k, v] of Object.entries(rest)) {
     cleaned[k] = (v === '' && (k.endsWith('Id') || k === 'dueDate' || k === 'scheduledDate' || k === 'date')) ? null : v;
   }
   const payload = toSnake(cleaned);
-  if (id) {
-    const { error } = await sb.from(table).update(payload).eq('id', id);
-    if (error) { console.error(`update ${table}:`, error); alert('Save failed: ' + error.message); }
-  } else {
-    const { error } = await sb.from(table).insert({ ...payload, user_id: userId });
-    if (error) { console.error(`insert ${table}:`, error); alert('Save failed: ' + error.message); }
-  }
+  const op = id ? sb.from(table).update(payload).eq('id', id) : sb.from(table).insert({ ...payload, user_id: userId });
+  const { error } = await op;
+  if (error) { console.error(`save ${table}:`, error); alert('Save failed: ' + error.message); }
 };
-
 const deleteItem = async (table, id) => {
   const { error } = await sb.from(table).delete().eq('id', id);
   if (error) console.error(`delete ${table}:`, error);
 };
 
-/* ════════════════════════════  APP (auth wrapper)  ════════════════════════════ */
+/* ════════════════════════════  APP  ════════════════════════════ */
 function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
     if (!sb) { setAuthLoading(false); return; }
-    sb.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user || null);
-      setAuthLoading(false);
-    });
-    const { data: { subscription } } = sb.auth.onAuthStateChange((_e, session) => {
-      setUser(session?.user || null);
-    });
+    sb.auth.getSession().then(({ data: { session } }) => { setUser(session?.user || null); setAuthLoading(false); });
+    const { data: { subscription } } = sb.auth.onAuthStateChange((_e, session) => setUser(session?.user || null));
     return () => subscription.unsubscribe();
   }, []);
 
@@ -222,40 +211,24 @@ function ConfigError() {
       <div className="card" style={{ maxWidth: 500 }}>
         <AlertCircle size={32} color="#c43d2c" style={{ marginBottom: 16 }} />
         <h1 className="display text-3xl mb-3">Setup needed</h1>
-        <p className="text-sm mb-4" style={{ color: '#6b6358', lineHeight: 1.6 }}>
-          Open this HTML file in a code editor and replace these two lines near the top of the script:
-        </p>
-        <pre style={{ background: '#fbf8f1', padding: 12, borderRadius: 8, fontSize: 12, overflow: 'auto' }}>
-{`const SUPABASE_URL = 'https://zgghvwoxkkhrxfqmyyzn.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnZ2h2d294a2tocnhmcW15eXpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxMjc4NjAsImV4cCI6MjA5MzcwMzg2MH0._gsNIrI4aPFghdpXDp_V1x8L6lJqJqptOzd6_zs_gjU';`}
-        </pre>
-        <p className="text-sm mt-4" style={{ color: '#6b6358' }}>
-          Find these values in: Supabase → your project → Settings → API
-        </p>
+        <p className="text-sm mb-4" style={{ color: '#6b6358' }}>Replace the SUPABASE_URL and SUPABASE_ANON_KEY values near the top of this HTML file with your project's credentials from Supabase → Settings → API.</p>
       </div>
     </div>
   );
 }
 
-/* ════════════════════════════  LOGIN  ════════════════════════════ */
 function Login() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
-
   const send = async (e) => {
     e?.preventDefault();
     if (!email.trim()) return;
     setLoading(true);
-    const { error } = await sb.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: window.location.href }
-    });
+    const { error } = await sb.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: window.location.href } });
     setLoading(false);
-    if (error) alert(error.message);
-    else setSent(true);
+    if (error) alert(error.message); else setSent(true);
   };
-
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div className="fade-in" style={{ width: '100%', maxWidth: 420 }}>
@@ -266,38 +239,23 @@ function Login() {
           <h1 className="display text-4xl mb-1">Studio</h1>
           <p className="text-sm" style={{ color: '#6b6358' }}>Your social command center.</p>
         </div>
-
         <div className="card">
           {sent ? (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <Mail size={32} color="#3d5a36" style={{ margin: '0 auto 16px' }} />
               <h2 className="display text-2xl mb-2">Check your email</h2>
-              <p className="text-sm mb-4" style={{ color: '#6b6358' }}>
-                We sent a magic link to <strong>{email}</strong>. Click the link to sign in.
-              </p>
+              <p className="text-sm mb-4" style={{ color: '#6b6358' }}>Magic link sent to <strong>{email}</strong>.</p>
               <button onClick={() => setSent(false)} className="btn-ghost">Use a different email</button>
             </div>
           ) : (
             <form onSubmit={send}>
               <h2 className="display text-2xl mb-1">Welcome</h2>
               <p className="text-sm mb-5" style={{ color: '#6b6358' }}>Sign in with your email — no password needed.</p>
-              <input
-                type="email"
-                className="input-field mb-4"
-                placeholder="you@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-              />
-              <button type="submit" className="btn-primary w-full justify-center" disabled={loading || !email.trim()}>
-                {loading ? 'Sending...' : 'Send magic link'}
-              </button>
+              <input type="email" className="input-field mb-4" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
+              <button type="submit" className="btn-primary w-full justify-center" disabled={loading || !email.trim()}>{loading ? 'Sending...' : 'Send magic link'}</button>
             </form>
           )}
         </div>
-        <p className="text-xs mt-6" style={{ color: '#a8a094', textAlign: 'center' }}>
-          Your data is private to you. Logging in from a new device shows the same data instantly.
-        </p>
       </div>
     </div>
   );
@@ -308,67 +266,58 @@ function Dashboard({ user }) {
   const [view, setView] = useState('dashboard');
   const [tasks, setTasks] = useState([]);
   const [team, setTeam] = useState([]);
+  const [teams, setTeams] = useState([]);
   const [clients, setClients] = useState([]);
   const [posts, setPosts] = useState([]);
   const [sheets, setSheets] = useState([]);
   const [strategies, setStrategies] = useState([]);
   const [comms, setComms] = useState([]);
+  const [igReports, setIgReports] = useState([]);
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const setters = {
-    tasks: setTasks, team: setTeam, clients: setClients,
-    posts: setPosts, sheets: setSheets, strategies: setStrategies, comms: setComms
+    tasks: setTasks, team: setTeam, teams: setTeams, clients: setClients, posts: setPosts,
+    sheets: setSheets, strategies: setStrategies, comms: setComms, instagram_reports: setIgReports
   };
 
   const refetch = useCallback(async (table) => {
     const data = await fetchTable(table);
-    setters[table](data);
+    setters[table]?.(data);
   }, []);
 
-  // Initial load
   useEffect(() => {
     (async () => {
       const results = await Promise.all(TABLES.map(fetchTable));
-      TABLES.forEach((t, i) => setters[t](results[i]));
+      TABLES.forEach((t, i) => setters[t]?.(results[i]));
       setLoading(false);
     })();
   }, [user.id]);
 
-  // Real-time: listen for any changes in any table and refetch
+  // Auto-seed default teams (first time only, per user)
+  useEffect(() => {
+    if (loading) return;
+    const seedKey = `studio:seeded:${user.id}`;
+    if (localStorage.getItem(seedKey)) return;
+    if (teams.length > 0) { localStorage.setItem(seedKey, '1'); return; }
+    const payload = DEFAULT_TEAMS.map(t => ({ ...t, user_id: user.id }));
+    sb.from('teams').insert(payload).then(({ error }) => {
+      if (!error) { localStorage.setItem(seedKey, '1'); refetch('teams'); }
+    });
+  }, [loading, teams.length, user.id, refetch]);
+
   useEffect(() => {
     const channels = TABLES.map(table =>
-      sb.channel(`rt-${table}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table }, () => refetch(table))
-        .subscribe()
+      sb.channel(`rt-${table}`).on('postgres_changes', { event: '*', schema: 'public', table }, () => refetch(table)).subscribe()
     );
     return () => { channels.forEach(c => sb.removeChannel(c)); };
   }, [user.id, refetch]);
 
-  // Save handlers
-  const saveItem = async (table, item) => {
-    await upsertItem(table, item, user.id);
-    await refetch(table);
-  };
-  const removeItem = async (table, id) => {
-    await deleteItem(table, id);
-    await refetch(table);
-  };
-
-  // Quick toggle for task status (used by checkbox in TaskRow)
-  const toggleTaskStatus = async (id, status) => {
-    const { error } = await sb.from('tasks').update({ status }).eq('id', id);
-    if (!error) await refetch('tasks');
-  };
-  const updatePostStatus = async (id, status) => {
-    const { error } = await sb.from('posts').update({ status }).eq('id', id);
-    if (!error) await refetch('posts');
-  };
-
-  const logout = async () => {
-    if (!window.confirm('Sign out?')) return;
-    await sb.auth.signOut();
-  };
+  const saveItem = async (table, item) => { await upsertItem(table, item, user.id); await refetch(table); };
+  const removeItem = async (table, id) => { await deleteItem(table, id); await refetch(table); };
+  const toggleTaskStatus = async (id, status) => { await sb.from('tasks').update({ status }).eq('id', id); await refetch('tasks'); };
+  const updatePostStatus = async (id, status) => { await sb.from('posts').update({ status }).eq('id', id); await refetch('posts'); };
+  const logout = async () => { if (window.confirm('Sign out?')) await sb.auth.signOut(); };
 
   const navItems = [
     { id: 'dashboard', label: 'Today', icon: LayoutDashboard },
@@ -376,16 +325,11 @@ function Dashboard({ user }) {
     { id: 'team', label: 'Team', icon: Users, count: team.length },
     { id: 'clients', label: 'Clients', icon: Briefcase, count: clients.length },
     { id: 'calendar', label: 'Content', icon: Calendar, count: posts.filter(p => p.status === 'scheduled').length },
+    { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'sheets', label: 'Sheets', icon: Table2, count: sheets.length },
     { id: 'strategy', label: 'Strategy', icon: Lightbulb, count: strategies.length },
   ];
-
-  const greeting = (() => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
-  })();
+  const greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })();
 
   if (loading) return <BootScreen message="Loading your workspace..." />;
 
@@ -394,38 +338,26 @@ function Dashboard({ user }) {
       <div className="flex">
         <aside className="w-64 min-h-screen p-6 sticky top-0 flex flex-col" style={{ borderRight: '1px solid #ece4d2' }}>
           <div className="flex items-center gap-2 mb-10">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#1a1814' }}>
-              <Sparkles size={18} color="#f6f1e8" />
-            </div>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#1a1814' }}><Sparkles size={18} color="#f6f1e8" /></div>
             <div className="flex-1 min-w-0">
               <div className="display font-semibold text-lg leading-none">Studio</div>
-              <div className="text-xs flex items-center gap-1.5" style={{ color: '#6b6358' }}>
-                <span className="sync-dot"></span> Live sync
-              </div>
+              <div className="text-xs flex items-center gap-1.5" style={{ color: '#6b6358' }}><span className="sync-dot"></span> Live sync</div>
             </div>
           </div>
-
           <nav className="space-y-1">
             {navItems.map(item => {
-              const ItemIcon = item.icon;
-              const active = view === item.id;
+              const ItemIcon = item.icon; const active = view === item.id;
               return (
-                <button key={item.id} onClick={() => setView(item.id)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all"
+                <button key={item.id} onClick={() => setView(item.id)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all"
                   style={{ background: active ? '#1a1814' : 'transparent', color: active ? '#f6f1e8' : '#1a1814' }}>
-                  <span className="flex items-center gap-3">
-                    <ItemIcon size={17} />
-                    <span className="text-sm font-medium">{item.label}</span>
-                  </span>
+                  <span className="flex items-center gap-3"><ItemIcon size={17} /><span className="text-sm font-medium">{item.label}</span></span>
                   {item.count !== undefined && item.count > 0 && (
-                    <span className="text-xs px-2 py-0.5 rounded-full"
-                      style={{ background: active ? '#c43d2c' : '#ece4d2', color: active ? '#fff' : '#6b6358' }}>{item.count}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: active ? '#c43d2c' : '#ece4d2', color: active ? '#fff' : '#6b6358' }}>{item.count}</span>
                   )}
                 </button>
               );
             })}
           </nav>
-
           <div className="mt-auto pt-6">
             <div className="p-3 rounded-xl mb-2" style={{ background: '#fbf8f1', border: '1px solid #ece4d2' }}>
               <p className="text-xs truncate font-medium">{user.email}</p>
@@ -440,55 +372,24 @@ function Dashboard({ user }) {
         <main className="flex-1 min-h-screen px-10 py-8" style={{ maxWidth: 1400 }}>
           {view === 'dashboard' && <DashboardView greeting={greeting} tasks={tasks} team={team} clients={clients} posts={posts} comms={comms} strategies={strategies} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} />}
           {view === 'tasks' && <TasksView tasks={tasks} team={team} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
-          {view === 'team' && <TeamView team={team} tasks={tasks} onAdd={() => setModal({ type: 'member' })} onEdit={(m) => setModal({ type: 'member', data: m })} />}
+          {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} />}
           {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} />}
           {view === 'calendar' && <CalendarView posts={posts} clients={clients} updateStatus={updatePostStatus} onAdd={() => setModal({ type: 'post' })} onEdit={(p) => setModal({ type: 'post', data: p })} />}
+          {view === 'reports' && <ReportsView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} igReports={igReports} onAddIgReport={() => setModal({ type: 'igReport' })} onEditIgReport={(r) => setModal({ type: 'igReport', data: r })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'sheets' && <SheetsView sheets={sheets} onAdd={() => setModal({ type: 'sheet' })} onEdit={(s) => setModal({ type: 'sheet', data: s })} />}
           {view === 'strategy' && <StrategyView strategies={strategies} clients={clients} onAdd={() => setModal({ type: 'strategy' })} onEdit={(s) => setModal({ type: 'strategy', data: s })} />}
         </main>
       </div>
 
-      {modal?.type === 'task' && (
-        <TaskModal task={modal.data} team={team} clients={clients}
-          onSave={async (t) => { await saveItem('tasks', t); setModal(null); }}
-          onDelete={modal.data ? async () => { await removeItem('tasks', modal.data.id); setModal(null); } : null}
-          onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'member' && (
-        <MemberModal member={modal.data}
-          onSave={async (m) => { await saveItem('team', m); setModal(null); }}
-          onDelete={modal.data ? async () => { await removeItem('team', modal.data.id); setModal(null); } : null}
-          onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'client' && (
-        <ClientModal client={modal.data}
-          onSave={async (c) => { await saveItem('clients', c); setModal(null); }}
-          onDelete={modal.data ? async () => { await removeItem('clients', modal.data.id); setModal(null); } : null}
-          onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'post' && (
-        <PostModal post={modal.data} clients={clients}
-          onSave={async (p) => { await saveItem('posts', p); setModal(null); }}
-          onDelete={modal.data ? async () => { await removeItem('posts', modal.data.id); setModal(null); } : null}
-          onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'sheet' && (
-        <SheetModal sheet={modal.data}
-          onSave={async (s) => { await saveItem('sheets', s); setModal(null); }}
-          onDelete={modal.data ? async () => { await removeItem('sheets', modal.data.id); setModal(null); } : null}
-          onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'strategy' && (
-        <StrategyModal strategy={modal.data} clients={clients}
-          onSave={async (s) => { await saveItem('strategies', s); setModal(null); }}
-          onDelete={modal.data ? async () => { await removeItem('strategies', modal.data.id); setModal(null); } : null}
-          onClose={() => setModal(null)} />
-      )}
-      {modal?.type === 'comm' && (
-        <CommModal comm={modal.data} clients={clients}
-          onSave={async (c) => { await saveItem('comms', c); setModal(null); }}
-          onClose={() => setModal(null)} />
-      )}
+      {modal?.type === 'task' && <TaskModal task={modal.data} team={team} clients={clients} onSave={async (t) => { await saveItem('tasks', t); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('tasks', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'member' && <MemberModal member={modal.data} teams={teams} initialTeamId={modal.initialTeamId} onSave={async (m) => { await saveItem('team', m); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('team', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'teamFolder' && <TeamFolderModal team={modal.data} onSave={async (t) => { await saveItem('teams', t); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('teams', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'client' && <ClientModal client={modal.data} onSave={async (c) => { await saveItem('clients', c); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('clients', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'post' && <PostModal post={modal.data} clients={clients} onSave={async (p) => { await saveItem('posts', p); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('posts', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'sheet' && <SheetModal sheet={modal.data} onSave={async (s) => { await saveItem('sheets', s); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('sheets', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'strategy' && <StrategyModal strategy={modal.data} clients={clients} onSave={async (s) => { await saveItem('strategies', s); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('strategies', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'comm' && <CommModal comm={modal.data} clients={clients} onSave={async (c) => { await saveItem('comms', c); setModal(null); }} onClose={() => setModal(null)} />}
+      {modal?.type === 'igReport' && <IgReportModal report={modal.data} clients={clients} onSave={async (r) => { await saveItem('instagram_reports', r); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('instagram_reports', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
     </div>
   );
 }
@@ -500,8 +401,7 @@ function DashboardView({ greeting, tasks, team, clients, posts, comms, strategie
   const overdue = tasks.filter(t => t.dueDate && t.dueDate < todayStr && t.status !== 'done');
   const inProgress = tasks.filter(t => t.status === 'progress');
   const postsToday = posts.filter(p => p.scheduledDate?.startsWith(todayStr));
-  const upcomingPosts = posts.filter(p => p.scheduledDate > new Date().toISOString() && p.status === 'scheduled')
-    .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate)).slice(0, 4);
+  const upcomingPosts = posts.filter(p => p.scheduledDate > new Date().toISOString() && p.status === 'scheduled').sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate)).slice(0, 4);
   const recentComms = comms.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
   const dateText = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
@@ -510,26 +410,19 @@ function DashboardView({ greeting, tasks, team, clients, posts, comms, strategie
       <header className="mb-10">
         <p className="text-sm uppercase mb-2" style={{ color: '#6b6358', letterSpacing: '0.15em' }}>{dateText}</p>
         <h1 className="display text-5xl font-light mb-2">{greeting}.</h1>
-        <p className="text-lg" style={{ color: '#6b6358' }}>
-          {dueToday.length === 0 && overdue.length === 0
-            ? "You're all clear today. Time to get ahead."
-            : `${dueToday.length} due today${overdue.length > 0 ? ` · ${overdue.length} overdue` : ''}`}
-        </p>
+        <p className="text-lg" style={{ color: '#6b6358' }}>{dueToday.length === 0 && overdue.length === 0 ? "You're all clear today. Time to get ahead." : `${dueToday.length} due today${overdue.length > 0 ? ` · ${overdue.length} overdue` : ''}`}</p>
       </header>
-
       <div className="grid grid-cols-4 gap-4 mb-10">
         <StatCard label="Active tasks" value={tasks.filter(t => t.status !== 'done').length} sub={`${inProgress.length} in progress`} accent="#1a1814" onClick={() => setView('tasks')} />
         <StatCard label="Clients" value={clients.length} sub={`${clients.filter(c => c.status === 'active').length} active`} accent="#c43d2c" onClick={() => setView('clients')} />
         <StatCard label="Posts scheduled" value={posts.filter(p => p.status === 'scheduled').length} sub={`${postsToday.length} going out today`} accent="#3d5a36" onClick={() => setView('calendar')} />
         <StatCard label="Team" value={team.length} sub="members" accent="#a04a1a" onClick={() => setView('team')} />
       </div>
-
       <div className="flex gap-3 mb-10">
         <button className="btn-primary" onClick={onQuickTask}><Plus size={16} /> New task</button>
         <button className="btn-ghost" onClick={onQuickPost}><Calendar size={14} /> Schedule post</button>
-        <button className="btn-ghost" onClick={() => setView('strategy')}><Lightbulb size={14} /> New strategy</button>
+        <button className="btn-ghost" onClick={() => setView('reports')}><BarChart3 size={14} /> View reports</button>
       </div>
-
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 card">
           <div className="flex items-center justify-between mb-5">
@@ -552,24 +445,16 @@ function DashboardView({ greeting, tasks, team, clients, posts, comms, strategie
               <p className="text-sm" style={{ color: '#6b6358' }}>Nothing on your plate today. Plan ahead?</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {[...overdue, ...dueToday].slice(0, 6).map(task => (
-                <TaskRow key={task.id} task={task} team={team} clients={clients} compact />
-              ))}
-            </div>
+            <div className="space-y-2">{[...overdue, ...dueToday].slice(0, 6).map(task => <TaskRow key={task.id} task={task} team={team} clients={clients} compact />)}</div>
           )}
         </div>
-
         <div className="card">
           <div className="flex items-center justify-between mb-5">
             <h2 className="display text-2xl">Going out</h2>
             <button className="text-xs flex items-center gap-1" style={{ color: '#6b6358' }} onClick={() => setView('calendar')}>All <ChevronRight size={12} /></button>
           </div>
           {upcomingPosts.length === 0 ? (
-            <div className="py-8 text-center">
-              <Calendar size={24} color="#a8a094" style={{ margin: '0 auto 8px' }} />
-              <p className="text-sm" style={{ color: '#6b6358' }}>No posts scheduled</p>
-            </div>
+            <div className="py-8 text-center"><Calendar size={24} color="#a8a094" style={{ margin: '0 auto 8px' }} /><p className="text-sm" style={{ color: '#6b6358' }}>No posts scheduled</p></div>
           ) : (
             <div className="space-y-3">
               {upcomingPosts.map(p => {
@@ -578,9 +463,7 @@ function DashboardView({ greeting, tasks, team, clients, posts, comms, strategie
                 const client = clients.find(c => c.id === p.clientId);
                 return (
                   <div key={p.id} className="flex items-start gap-3 p-3 rounded-lg hover-lift" style={{ background: '#fbf8f1' }}>
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: platform?.color || '#1a1814' }}>
-                      <PIcon size={14} color="#fff" />
-                    </div>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: platform?.color || '#1a1814' }}><PIcon size={14} color="#fff" /></div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs mb-0.5" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{client?.name || 'Unassigned'}</p>
                       <p className="text-sm leading-snug truncate">{p.caption || 'Untitled post'}</p>
@@ -593,26 +476,18 @@ function DashboardView({ greeting, tasks, team, clients, posts, comms, strategie
           )}
         </div>
       </div>
-
       <div className="grid grid-cols-2 gap-6 mt-6">
         <div className="card">
           <h2 className="display text-2xl mb-5">Recent client activity</h2>
-          {recentComms.length === 0 ? (
-            <p className="text-sm py-4" style={{ color: '#6b6358' }}>No client interactions logged yet. Start tracking conversations from the Clients tab.</p>
-          ) : (
+          {recentComms.length === 0 ? <p className="text-sm py-4" style={{ color: '#6b6358' }}>No client interactions logged yet.</p> : (
             <div className="space-y-3">
               {recentComms.map(c => {
                 const client = clients.find(cl => cl.id === c.clientId);
                 return (
                   <div key={c.id} className="flex items-start gap-3 pb-3" style={{ borderBottom: '1px solid #ece4d2' }}>
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-semibold" style={{ background: '#1a1814', color: '#f6f1e8' }}>
-                      {client?.name?.[0]?.toUpperCase() || '?'}
-                    </div>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-semibold" style={{ background: '#1a1814', color: '#f6f1e8' }}>{client?.name?.[0]?.toUpperCase() || '?'}</div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-sm font-semibold">{client?.name || 'Unknown'}</p>
-                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#ece4d2', color: '#6b6358' }}>{c.type}</span>
-                      </div>
+                      <div className="flex items-center gap-2 mb-0.5"><p className="text-sm font-semibold">{client?.name || 'Unknown'}</p><span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#ece4d2', color: '#6b6358' }}>{c.type}</span></div>
                       <p className="text-sm leading-snug" style={{ color: '#3a3530' }}>{c.summary}</p>
                       <p className="text-xs mt-1" style={{ color: '#a8a094' }}>{formatDateTime(c.date)}</p>
                     </div>
@@ -622,12 +497,8 @@ function DashboardView({ greeting, tasks, team, clients, posts, comms, strategie
             </div>
           )}
         </div>
-
         <div className="card" style={{ background: '#1a1814', color: '#f6f1e8' }}>
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp size={16} />
-            <span className="text-xs" style={{ textTransform: 'uppercase', letterSpacing: '0.15em' }}>This week</span>
-          </div>
+          <div className="flex items-center gap-2 mb-3"><TrendingUp size={16} /><span className="text-xs" style={{ textTransform: 'uppercase', letterSpacing: '0.15em' }}>This week</span></div>
           <h2 className="display text-3xl mb-6 font-light">At a glance</h2>
           <div className="space-y-4">
             <MetricRow label="Tasks completed" value={tasks.filter(t => t.status === 'done').length} />
@@ -635,174 +506,188 @@ function DashboardView({ greeting, tasks, team, clients, posts, comms, strategie
             <MetricRow label="Active clients" value={clients.filter(c => c.status === 'active').length} />
             <MetricRow label="Strategies in motion" value={strategies.length} />
           </div>
-          <button className="mt-6 w-full py-3 rounded-full font-semibold text-sm flex items-center justify-center gap-2"
-            style={{ background: '#c43d2c', color: '#fff' }} onClick={() => setView('strategy')}>
-            <Lightbulb size={14} /> Plan something new
-          </button>
+          <button className="mt-6 w-full py-3 rounded-full font-semibold text-sm flex items-center justify-center gap-2" style={{ background: '#c43d2c', color: '#fff' }} onClick={() => setView('reports')}><BarChart3 size={14} /> View full reports</button>
         </div>
       </div>
     </div>
   );
 }
-
 function StatCard({ label, value, sub, accent, onClick }) {
   return (
     <button onClick={onClick} className="text-left card hover-lift" style={{ cursor: 'pointer' }}>
-      <div className="flex items-start justify-between mb-3">
-        <p className="text-xs" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</p>
-        <ArrowUpRight size={14} color="#a8a094" />
-      </div>
+      <div className="flex items-start justify-between mb-3"><p className="text-xs" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</p><ArrowUpRight size={14} color="#a8a094" /></div>
       <p className="display text-4xl font-light mb-1" style={{ color: accent }}>{value}</p>
       <p className="text-xs" style={{ color: '#6b6358' }}>{sub}</p>
     </button>
   );
 }
-
 function MetricRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between pb-3" style={{ borderBottom: '1px solid #3a3530' }}>
-      <span className="text-sm" style={{ opacity: 0.7 }}>{label}</span>
-      <span className="display text-2xl">{value}</span>
-    </div>
-  );
+  return <div className="flex items-center justify-between pb-3" style={{ borderBottom: '1px solid #3a3530' }}><span className="text-sm" style={{ opacity: 0.7 }}>{label}</span><span className="display text-2xl">{value}</span></div>;
 }
 
 /* ════════════════════════════  TASKS VIEW  ════════════════════════════ */
 function TasksView({ tasks, team, clients, toggleStatus, onAdd, onEdit }) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-
-  const filtered = tasks
-    .filter(t => filter === 'all' || t.status === filter)
-    .filter(t => !search || t.title.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => {
-      const order = { high: 0, medium: 1, low: 2 };
-      return (order[a.priority] || 1) - (order[b.priority] || 1);
-    });
-
-  const buckets = [
-    { id: 'todo', label: 'To do' }, { id: 'progress', label: 'In progress' },
-    { id: 'review', label: 'Review' }, { id: 'done', label: 'Done' }, { id: 'blocked', label: 'Blocked' },
-  ];
-
+  const filtered = tasks.filter(t => filter === 'all' || t.status === filter).filter(t => !search || t.title.toLowerCase().includes(search.toLowerCase())).sort((a, b) => { const o = { high: 0, medium: 1, low: 2 }; return (o[a.priority] || 1) - (o[b.priority] || 1); });
+  const buckets = [{ id: 'todo', label: 'To do' }, { id: 'progress', label: 'In progress' }, { id: 'review', label: 'Review' }, { id: 'done', label: 'Done' }, { id: 'blocked', label: 'Blocked' }];
   return (
     <div className="fade-in">
       <header className="mb-8 flex items-end justify-between">
-        <div>
-          <p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Workspace</p>
-          <h1 className="display text-5xl font-light">Tasks</h1>
-        </div>
+        <div><p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Workspace</p><h1 className="display text-5xl font-light">Tasks</h1></div>
         <button className="btn-primary" onClick={onAdd}><Plus size={16} /> New task</button>
       </header>
-
       <div className="flex items-center gap-3 mb-6 flex-wrap">
         <div className="flex items-center gap-2 px-3 py-2 rounded-full" style={{ background: '#fff', border: '1px solid #ece4d2' }}>
           <Search size={14} color="#6b6358" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tasks..." className="bg-transparent outline-none text-sm" style={{ width: 200 }} />
         </div>
-        <button onClick={() => setFilter('all')} className="text-sm px-3 py-1.5 rounded-full transition-all"
-          style={{ background: filter === 'all' ? '#1a1814' : 'transparent', color: filter === 'all' ? '#fff' : '#1a1814', border: '1px solid #d4ccbc' }}>
-          All ({tasks.length})
-        </button>
-        {buckets.map(b => {
-          const count = tasks.filter(t => t.status === b.id).length;
-          return (
-            <button key={b.id} onClick={() => setFilter(b.id)} className="text-sm px-3 py-1.5 rounded-full transition-all"
-              style={{ background: filter === b.id ? '#1a1814' : 'transparent', color: filter === b.id ? '#fff' : '#1a1814', border: '1px solid #d4ccbc' }}>
-              {b.label} ({count})
-            </button>
-          );
-        })}
+        <button onClick={() => setFilter('all')} className="text-sm px-3 py-1.5 rounded-full" style={{ background: filter === 'all' ? '#1a1814' : 'transparent', color: filter === 'all' ? '#fff' : '#1a1814', border: '1px solid #d4ccbc' }}>All ({tasks.length})</button>
+        {buckets.map(b => { const c = tasks.filter(t => t.status === b.id).length; return (<button key={b.id} onClick={() => setFilter(b.id)} className="text-sm px-3 py-1.5 rounded-full" style={{ background: filter === b.id ? '#1a1814' : 'transparent', color: filter === b.id ? '#fff' : '#1a1814', border: '1px solid #d4ccbc' }}>{b.label} ({c})</button>); })}
       </div>
-
-      {filtered.length === 0 ? (
-        <EmptyState icon={CheckSquare} title="No tasks yet"
-          description="Create your first task to start tracking work across your team and clients."
-          action={onAdd} actionLabel="Add a task" />
-      ) : (
-        <div className="space-y-2">
-          {filtered.map(t => (
-            <TaskRow key={t.id} task={t} team={team} clients={clients} onClick={() => onEdit(t)} onStatusChange={toggleStatus} />
-          ))}
-        </div>
-      )}
+      {filtered.length === 0 ? <EmptyState icon={CheckSquare} title="No tasks yet" description="Create your first task to start tracking work across your team and clients." action={onAdd} actionLabel="Add a task" /> : <div className="space-y-2">{filtered.map(t => <TaskRow key={t.id} task={t} team={team} clients={clients} onClick={() => onEdit(t)} onStatusChange={toggleStatus} />)}</div>}
     </div>
   );
 }
-
 function TaskRow({ task, team, clients, compact, onClick, onStatusChange }) {
   const member = team.find(m => m.id === task.assigneeId);
   const client = clients.find(c => c.id === task.clientId);
   const status = STATUS_COLORS[task.status] || STATUS_COLORS.todo;
   const isOverdue = task.dueDate && task.dueDate < today() && task.status !== 'done';
-
   return (
-    <div onClick={onClick} className="flex items-center gap-4 p-3 rounded-xl hover-lift"
-      style={{ background: '#fff', border: '1px solid #ece4d2', cursor: onClick ? 'pointer' : 'default' }}>
-      <button onClick={(e) => { e.stopPropagation(); if (onStatusChange) onStatusChange(task.id, task.status === 'done' ? 'todo' : 'done'); }} style={{ flexShrink: 0 }}>
-        {task.status === 'done' ? <CheckCircle2 size={20} color="#6b8a5e" /> : <Circle size={20} color="#a8a094" />}
-      </button>
+    <div onClick={onClick} className="flex items-center gap-4 p-3 rounded-xl hover-lift" style={{ background: '#fff', border: '1px solid #ece4d2', cursor: onClick ? 'pointer' : 'default' }}>
+      <button onClick={(e) => { e.stopPropagation(); if (onStatusChange) onStatusChange(task.id, task.status === 'done' ? 'todo' : 'done'); }} style={{ flexShrink: 0 }}>{task.status === 'done' ? <CheckCircle2 size={20} color="#6b8a5e" /> : <Circle size={20} color="#a8a094" />}</button>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
           {task.priority === 'high' && <Flag size={12} color={PRIORITY_COLORS.high} style={{ fill: PRIORITY_COLORS.high }} />}
-          <p className="text-sm font-semibold truncate" style={{ textDecoration: task.status === 'done' ? 'line-through' : 'none', opacity: task.status === 'done' ? 0.5 : 1 }}>
-            {task.title}
-          </p>
+          <p className="text-sm font-semibold truncate" style={{ textDecoration: task.status === 'done' ? 'line-through' : 'none', opacity: task.status === 'done' ? 0.5 : 1 }}>{task.title}</p>
         </div>
-        {!compact && task.description && (
-          <p className="text-xs leading-snug" style={{ color: '#6b6358' }}>{task.description.slice(0, 100)}{task.description.length > 100 ? '...' : ''}</p>
-        )}
+        {!compact && task.description && <p className="text-xs leading-snug" style={{ color: '#6b6358' }}>{task.description.slice(0, 100)}{task.description.length > 100 ? '...' : ''}</p>}
       </div>
       <div className="flex items-center gap-3 flex-shrink-0">
         {client && <span className="text-xs px-2 py-1 rounded-full" style={{ background: '#fbf8f1', color: '#6b6358', border: '1px solid #ece4d2' }}>{client.name}</span>}
         <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ background: status.bg, color: status.text }}>{task.status}</span>
-        {member && (
-          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ background: '#1a1814', color: '#f6f1e8' }} title={member.name}>
-            {member.name[0]?.toUpperCase()}
-          </div>
-        )}
-        {task.dueDate && (
-          <span className="text-xs flex items-center gap-1" style={{ color: isOverdue ? '#c43d2c' : '#6b6358' }}>
-            <Clock size={11} /> {formatDate(task.dueDate)}
-          </span>
-        )}
+        {member && <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ background: '#1a1814', color: '#f6f1e8' }} title={member.name}>{member.name[0]?.toUpperCase()}</div>}
+        {task.dueDate && <span className="text-xs flex items-center gap-1" style={{ color: isOverdue ? '#c43d2c' : '#6b6358' }}><Clock size={11} /> {formatDate(task.dueDate)}</span>}
       </div>
     </div>
   );
 }
 
-/* ════════════════════════════  TEAM VIEW  ════════════════════════════ */
-function TeamView({ team, tasks, onAdd, onEdit }) {
+/* ════════════════════════════  TEAM VIEW (folders)  ════════════════════════════ */
+function TeamView({ team, teams, tasks, onAddMember, onEditMember, onAddTeam, onEditTeam }) {
+  const [selectedTeamId, setSelectedTeamId] = useState(null); // null = folders view, 'all' = all members, 'unassigned' = no team, otherwise teamId
+  const sortedTeams = [...teams].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+  if (selectedTeamId === null) {
+    // Show folder view
+    return (
+      <div className="fade-in">
+        <header className="mb-8 flex items-end justify-between">
+          <div><p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>People</p><h1 className="display text-5xl font-light">Team</h1></div>
+          <div className="flex gap-2">
+            <button className="btn-ghost" onClick={onAddTeam}><Folder size={14} /> New team</button>
+            <button className="btn-primary" onClick={onAddMember}><Plus size={16} /> Add member</button>
+          </div>
+        </header>
+        <div className="grid grid-cols-3 gap-4">
+          {sortedTeams.map(t => {
+            const members = team.filter(m => m.teamId === t.id);
+            const memberTasks = tasks.filter(task => members.some(m => m.id === task.assigneeId));
+            const active = memberTasks.filter(task => task.status !== 'done').length;
+            return (
+              <button key={t.id} onClick={() => setSelectedTeamId(t.id)} className="card hover-lift text-left" style={{ position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: t.color || '#1a1814' }}></div>
+                <div className="flex items-start justify-between mb-4 mt-1">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: (t.color || '#1a1814') + '20' }}><Folder size={18} color={t.color || '#1a1814'} /></div>
+                  <ChevronRight size={16} color="#a8a094" />
+                </div>
+                <h3 className="display text-2xl mb-1">{t.name}</h3>
+                {t.description && <p className="text-xs mb-3" style={{ color: '#6b6358' }}>{t.description}</p>}
+                <div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid #ece4d2' }}>
+                  <div><p className="display text-xl">{members.length}</p><p className="text-xs" style={{ color: '#6b6358' }}>members</p></div>
+                  <div><p className="display text-xl">{active}</p><p className="text-xs" style={{ color: '#6b6358' }}>active tasks</p></div>
+                </div>
+              </button>
+            );
+          })}
+          {/* Unassigned members folder */}
+          {team.filter(m => !m.teamId).length > 0 && (
+            <button onClick={() => setSelectedTeamId('unassigned')} className="card hover-lift text-left" style={{ position: 'relative', overflow: 'hidden', borderStyle: 'dashed' }}>
+              <div className="flex items-start justify-between mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#fbf8f1' }}><Folder size={18} color="#6b6358" /></div>
+                <ChevronRight size={16} color="#a8a094" />
+              </div>
+              <h3 className="display text-2xl mb-1">Unassigned</h3>
+              <p className="text-xs mb-3" style={{ color: '#6b6358' }}>Members not in any team</p>
+              <div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid #ece4d2' }}>
+                <div><p className="display text-xl">{team.filter(m => !m.teamId).length}</p><p className="text-xs" style={{ color: '#6b6358' }}>members</p></div>
+              </div>
+            </button>
+          )}
+          <button onClick={() => setSelectedTeamId('all')} className="card hover-lift text-left" style={{ position: 'relative', background: '#fbf8f1' }}>
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#1a1814' }}><Users size={18} color="#fff" /></div>
+              <ChevronRight size={16} color="#a8a094" />
+            </div>
+            <h3 className="display text-2xl mb-1">Everyone</h3>
+            <p className="text-xs mb-3" style={{ color: '#6b6358' }}>All members across all teams</p>
+            <div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid #ece4d2' }}>
+              <div><p className="display text-xl">{team.length}</p><p className="text-xs" style={{ color: '#6b6358' }}>total</p></div>
+            </div>
+          </button>
+        </div>
+        {teams.length === 0 && team.length === 0 && (
+          <div className="mt-6"><EmptyState icon={Users} title="No team members yet" description="Click on any team folder above and add members. Or create your own team folders." action={onAddMember} actionLabel="Add first member" /></div>
+        )}
+      </div>
+    );
+  }
+
+  // Show members in selected team
+  const selectedTeam = teams.find(t => t.id === selectedTeamId);
+  const members = selectedTeamId === 'all' ? team : selectedTeamId === 'unassigned' ? team.filter(m => !m.teamId) : team.filter(m => m.teamId === selectedTeamId);
+  const titleText = selectedTeamId === 'all' ? 'Everyone' : selectedTeamId === 'unassigned' ? 'Unassigned' : selectedTeam?.name;
+  const isManaged = selectedTeamId !== 'all' && selectedTeamId !== 'unassigned';
+
   return (
     <div className="fade-in">
+      <button onClick={() => setSelectedTeamId(null)} className="flex items-center gap-1.5 text-sm mb-4" style={{ color: '#6b6358' }}>
+        <ChevronLeft size={14} /> All teams
+      </button>
       <header className="mb-8 flex items-end justify-between">
         <div>
-          <p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>People</p>
-          <h1 className="display text-5xl font-light">Team</h1>
+          <div className="flex items-center gap-3 mb-2">
+            {isManaged && <div className="w-3 h-3 rounded-full" style={{ background: selectedTeam?.color || '#1a1814' }}></div>}
+            <p className="text-sm" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>{isManaged ? 'Team' : 'View'}</p>
+          </div>
+          <h1 className="display text-5xl font-light">{titleText}</h1>
+          {selectedTeam?.description && <p className="text-sm mt-2" style={{ color: '#6b6358' }}>{selectedTeam.description}</p>}
         </div>
-        <button className="btn-primary" onClick={onAdd}><Plus size={16} /> Add member</button>
+        <div className="flex gap-2">
+          {isManaged && <button className="btn-ghost" onClick={() => onEditTeam(selectedTeam)}><Edit2 size={13} /> Edit team</button>}
+          <button className="btn-primary" onClick={onAddMember}><Plus size={16} /> Add member</button>
+        </div>
       </header>
-      {team.length === 0 ? (
-        <EmptyState icon={Users} title="No team members yet"
-          description="Add your team to assign tasks and track everyone's workload at a glance."
-          action={onAdd} actionLabel="Add first member" />
+      {members.length === 0 ? (
+        <EmptyState icon={Users} title="No members here yet" description={isManaged ? `Add members to the ${selectedTeam.name}.` : 'Add team members to get started.'} action={onAddMember} actionLabel="Add member" />
       ) : (
         <div className="grid grid-cols-3 gap-4">
-          {team.map(m => {
+          {members.map(m => {
             const memberTasks = tasks.filter(t => t.assigneeId === m.id);
             const active = memberTasks.filter(t => t.status !== 'done').length;
             const done = memberTasks.filter(t => t.status === 'done').length;
+            const memberTeam = teams.find(t => t.id === m.teamId);
             return (
-              <button key={m.id} onClick={() => onEdit(m)} className="card hover-lift text-left">
+              <button key={m.id} onClick={() => onEditMember(m)} className="card hover-lift text-left">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-semibold flex-shrink-0" style={{ background: '#1a1814', color: '#f6f1e8' }}>
-                    {m.name[0]?.toUpperCase()}
-                  </div>
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-semibold flex-shrink-0" style={{ background: '#1a1814', color: '#f6f1e8' }}>{m.name[0]?.toUpperCase()}</div>
                   <div className="min-w-0">
                     <p className="font-semibold truncate">{m.name}</p>
                     <p className="text-xs truncate" style={{ color: '#6b6358' }}>{m.role || 'Team member'}</p>
                   </div>
                 </div>
+                {memberTeam && !isManaged && <span className="inline-block text-xs px-2 py-0.5 rounded-full mb-2" style={{ background: (memberTeam.color || '#1a1814') + '20', color: memberTeam.color || '#1a1814' }}>{memberTeam.name}</span>}
                 {m.email && <p className="text-xs mb-3 truncate" style={{ color: '#6b6358' }}>{m.email}</p>}
                 <div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid #ece4d2' }}>
                   <div><p className="display text-xl">{active}</p><p className="text-xs" style={{ color: '#6b6358' }}>active</p></div>
@@ -823,32 +708,20 @@ function ClientsView({ clients, comms, tasks, onAdd, onEdit, onLog }) {
   const sel = clients.find(c => c.id === selected);
   const selComms = comms.filter(c => c.clientId === selected).sort((a, b) => b.date.localeCompare(a.date));
   const selTasks = tasks.filter(t => t.clientId === selected);
-
   return (
     <div className="fade-in">
       <header className="mb-8 flex items-end justify-between">
-        <div>
-          <p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Accounts</p>
-          <h1 className="display text-5xl font-light">Clients</h1>
-        </div>
+        <div><p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Accounts</p><h1 className="display text-5xl font-light">Clients</h1></div>
         <button className="btn-primary" onClick={onAdd}><Plus size={16} /> Add client</button>
       </header>
-      {clients.length === 0 ? (
-        <EmptyState icon={Briefcase} title="No clients yet"
-          description="Track your clients, log every conversation, and never lose context again."
-          action={onAdd} actionLabel="Add first client" />
-      ) : (
+      {clients.length === 0 ? <EmptyState icon={Briefcase} title="No clients yet" description="Track your clients, log every conversation, and never lose context again." action={onAdd} actionLabel="Add first client" /> : (
         <div className="grid grid-cols-3 gap-6">
           <div className="col-span-1 space-y-2">
             {clients.map(c => {
               const lastComm = comms.filter(x => x.clientId === c.id).sort((a, b) => b.date.localeCompare(a.date))[0];
               return (
-                <button key={c.id} onClick={() => setSelected(c.id)} className="w-full text-left p-4 rounded-xl hover-lift transition-all"
-                  style={{ background: selected === c.id ? '#1a1814' : '#fff', color: selected === c.id ? '#f6f1e8' : '#1a1814', border: '1px solid ' + (selected === c.id ? '#1a1814' : '#ece4d2') }}>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-semibold truncate">{c.name}</p>
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: c.status === 'active' ? '#dde9d9' : '#ece4d2', color: c.status === 'active' ? '#3d5a36' : '#6b6358' }}>{c.status || 'active'}</span>
-                  </div>
+                <button key={c.id} onClick={() => setSelected(c.id)} className="w-full text-left p-4 rounded-xl hover-lift" style={{ background: selected === c.id ? '#1a1814' : '#fff', color: selected === c.id ? '#f6f1e8' : '#1a1814', border: '1px solid ' + (selected === c.id ? '#1a1814' : '#ece4d2') }}>
+                  <div className="flex items-center justify-between mb-1"><p className="font-semibold truncate">{c.name}</p><span className="text-xs px-2 py-0.5 rounded-full" style={{ background: c.status === 'active' ? '#dde9d9' : '#ece4d2', color: c.status === 'active' ? '#3d5a36' : '#6b6358' }}>{c.status || 'active'}</span></div>
                   <p className="text-xs truncate" style={{ opacity: 0.7 }}>{c.contactName || c.contactInfo || 'No contact info'}</p>
                   {lastComm && <p className="text-xs mt-2" style={{ opacity: 0.6 }}>Last: {formatDate(lastComm.date)}</p>}
                 </button>
@@ -864,71 +737,28 @@ function ClientsView({ clients, comms, tasks, onAdd, onEdit, onLog }) {
                     <h2 className="display text-3xl">{sel.name}</h2>
                     {sel.contactName && <p className="text-sm mt-1" style={{ color: '#6b6358' }}>{sel.contactName}</p>}
                   </div>
-                  <div className="flex gap-2">
-                    <button className="btn-ghost" onClick={() => onLog(sel)}><MessageSquare size={13} /> Log</button>
-                    <button className="btn-ghost" onClick={() => onEdit(sel)}><Edit2 size={13} /> Edit</button>
-                  </div>
+                  <div className="flex gap-2"><button className="btn-ghost" onClick={() => onLog(sel)}><MessageSquare size={13} /> Log</button><button className="btn-ghost" onClick={() => onEdit(sel)}><Edit2 size={13} /> Edit</button></div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 mb-6 p-4 rounded-xl" style={{ background: '#fbf8f1' }}>
-                  {sel.contactInfo && (
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact</p>
-                      <p className="text-sm">{sel.contactInfo}</p>
-                    </div>
-                  )}
-                  {sel.platforms && (
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Platforms</p>
-                      <p className="text-sm">{sel.platforms}</p>
-                    </div>
-                  )}
+                  {sel.contactInfo && <div><p className="text-xs mb-1" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact</p><p className="text-sm">{sel.contactInfo}</p></div>}
+                  {sel.platforms && <div><p className="text-xs mb-1" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Platforms</p><p className="text-sm">{sel.platforms}</p></div>}
                 </div>
-                {sel.notes && (
-                  <div className="mb-6 p-4 rounded-xl" style={{ background: '#fbf8f1' }}>
-                    <p className="text-xs mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notes</p>
-                    <p className="text-sm leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>{sel.notes}</p>
-                  </div>
-                )}
+                {sel.notes && <div className="mb-6 p-4 rounded-xl" style={{ background: '#fbf8f1' }}><p className="text-xs mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notes</p><p className="text-sm leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>{sel.notes}</p></div>}
                 <div className="mb-6">
                   <h3 className="display text-xl mb-3">Communication log</h3>
-                  {selComms.length === 0 ? (
-                    <p className="text-sm py-4" style={{ color: '#6b6358' }}>No communications logged yet.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {selComms.map(c => (
-                        <div key={c.id} className="p-3 rounded-lg" style={{ background: '#fbf8f1' }}>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#1a1814', color: '#f6f1e8' }}>{c.type}</span>
-                            <span className="text-xs" style={{ color: '#6b6358' }}>{formatDateTime(c.date)}</span>
-                          </div>
-                          <p className="text-sm leading-relaxed">{c.summary}</p>
-                        </div>
-                      ))}
-                    </div>
+                  {selComms.length === 0 ? <p className="text-sm py-4" style={{ color: '#6b6358' }}>No communications logged yet.</p> : (
+                    <div className="space-y-3">{selComms.map(c => <div key={c.id} className="p-3 rounded-lg" style={{ background: '#fbf8f1' }}><div className="flex items-center gap-2 mb-1"><span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#1a1814', color: '#f6f1e8' }}>{c.type}</span><span className="text-xs" style={{ color: '#6b6358' }}>{formatDateTime(c.date)}</span></div><p className="text-sm leading-relaxed">{c.summary}</p></div>)}</div>
                   )}
                 </div>
                 <div>
                   <h3 className="display text-xl mb-3">Active tasks</h3>
-                  {selTasks.filter(t => t.status !== 'done').length === 0 ? (
-                    <p className="text-sm py-2" style={{ color: '#6b6358' }}>No active tasks for this client.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {selTasks.filter(t => t.status !== 'done').map(t => (
-                        <div key={t.id} className="p-2 rounded-lg flex items-center justify-between" style={{ background: '#fbf8f1' }}>
-                          <p className="text-sm">{t.title}</p>
-                          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: STATUS_COLORS[t.status]?.bg, color: STATUS_COLORS[t.status]?.text }}>{t.status}</span>
-                        </div>
-                      ))}
-                    </div>
+                  {selTasks.filter(t => t.status !== 'done').length === 0 ? <p className="text-sm py-2" style={{ color: '#6b6358' }}>No active tasks for this client.</p> : (
+                    <div className="space-y-2">{selTasks.filter(t => t.status !== 'done').map(t => <div key={t.id} className="p-2 rounded-lg flex items-center justify-between" style={{ background: '#fbf8f1' }}><p className="text-sm">{t.title}</p><span className="text-xs px-2 py-0.5 rounded-full" style={{ background: STATUS_COLORS[t.status]?.bg, color: STATUS_COLORS[t.status]?.text }}>{t.status}</span></div>)}</div>
                   )}
                 </div>
               </div>
             ) : (
-              <div className="card text-center py-16">
-                <Briefcase size={32} color="#a8a094" style={{ margin: '0 auto 12px' }} />
-                <p className="display text-xl mb-1">Select a client</p>
-                <p className="text-sm" style={{ color: '#6b6358' }}>Pick from the list to see details and history.</p>
-              </div>
+              <div className="card text-center py-16"><Briefcase size={32} color="#a8a094" style={{ margin: '0 auto 12px' }} /><p className="display text-xl mb-1">Select a client</p><p className="text-sm" style={{ color: '#6b6358' }}>Pick from the list to see details and history.</p></div>
             )}
           </div>
         </div>
@@ -948,67 +778,44 @@ function CalendarView({ posts, clients, updateStatus, onAdd, onEdit }) {
     if (tab === 'published') return sorted.filter(p => p.status === 'published').reverse();
     return sorted;
   })();
-
   return (
     <div className="fade-in">
       <header className="mb-8 flex items-end justify-between">
-        <div>
-          <p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Calendar</p>
-          <h1 className="display text-5xl font-light">Content</h1>
-        </div>
+        <div><p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Calendar</p><h1 className="display text-5xl font-light">Content</h1></div>
         <button className="btn-primary" onClick={onAdd}><Plus size={16} /> Schedule post</button>
       </header>
       <div className="flex gap-2 mb-6">
         {[{ id: 'upcoming', label: 'Upcoming' }, { id: 'draft', label: 'Drafts' }, { id: 'published', label: 'Published' }, { id: 'all', label: 'All' }].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} className="px-4 py-2 rounded-full text-sm transition-all"
-            style={{ background: tab === t.id ? '#1a1814' : 'transparent', color: tab === t.id ? '#fff' : '#1a1814', border: '1px solid #d4ccbc' }}>
-            {t.label}
-          </button>
+          <button key={t.id} onClick={() => setTab(t.id)} className="px-4 py-2 rounded-full text-sm" style={{ background: tab === t.id ? '#1a1814' : 'transparent', color: tab === t.id ? '#fff' : '#1a1814', border: '1px solid #d4ccbc' }}>{t.label}</button>
         ))}
       </div>
-      {filtered.length === 0 ? (
-        <EmptyState icon={Calendar} title="No posts here"
-          description="Plan your Meta posts (Facebook, Instagram), LinkedIn, X, and more — all in one calendar."
-          action={onAdd} actionLabel="Schedule a post" />
-      ) : (
+      {filtered.length === 0 ? <EmptyState icon={Calendar} title="No posts here" description="Plan your Meta posts (Facebook, Instagram), LinkedIn, X, and more — all in one calendar." action={onAdd} actionLabel="Schedule a post" /> : (
         <div className="grid grid-cols-2 gap-4">
           {filtered.map(p => {
             const platform = PLATFORMS.find(pl => pl.id === p.platform);
             const PIcon = platform?.icon || Instagram;
             const client = clients.find(c => c.id === p.clientId);
+            const hasMetrics = p.status === 'published' && (p.likes > 0 || p.comments > 0 || p.reach > 0);
             return (
               <button key={p.id} onClick={() => onEdit(p)} className="card hover-lift text-left">
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: platform?.color || '#1a1814' }}>
-                    <PIcon size={18} color="#fff" />
-                  </div>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: platform?.color || '#1a1814' }}><PIcon size={18} color="#fff" /></div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-xs" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{platform?.name}</p>
-                      {client && <span className="text-xs">·</span>}
-                      {client && <p className="text-xs font-semibold">{client.name}</p>}
-                    </div>
+                    <div className="flex items-center gap-2 mb-1"><p className="text-xs" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{platform?.name}</p>{client && <span className="text-xs">·</span>}{client && <p className="text-xs font-semibold">{client.name}</p>}</div>
                     <p className="text-xs" style={{ color: '#a8a094' }}>{formatDateTime(p.scheduledDate)}</p>
                   </div>
-                  <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{
-                    background: p.status === 'published' ? '#dde9d9' : p.status === 'draft' ? '#f4ede0' : '#fde8d6',
-                    color: p.status === 'published' ? '#3d5a36' : p.status === 'draft' ? '#6b6358' : '#a04a1a'
-                  }}>{p.status}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: p.status === 'published' ? '#dde9d9' : p.status === 'draft' ? '#f4ede0' : '#fde8d6', color: p.status === 'published' ? '#3d5a36' : p.status === 'draft' ? '#6b6358' : '#a04a1a' }}>{p.status}</span>
                 </div>
-                <p className="text-sm leading-relaxed mb-3" style={{ color: '#3a3530' }}>
-                  {p.caption?.slice(0, 180) || 'Untitled post'}{(p.caption?.length || 0) > 180 ? '...' : ''}
-                </p>
-                {p.hashtags && (
-                  <p className="text-xs mb-3" style={{ color: '#3d6bc4' }}>{p.hashtags.split(' ').slice(0, 5).join(' ')}</p>
-                )}
-                {p.status === 'scheduled' && (
-                  <div className="flex gap-2 pt-3" style={{ borderTop: '1px solid #ece4d2' }}>
-                    <button onClick={(e) => { e.stopPropagation(); updateStatus(p.id, 'published'); }}
-                      className="flex-1 text-xs py-1.5 rounded-full font-medium" style={{ background: '#dde9d9', color: '#3d5a36' }}>
-                      Mark published
-                    </button>
+                <p className="text-sm leading-relaxed mb-3" style={{ color: '#3a3530' }}>{p.caption?.slice(0, 180) || 'Untitled post'}{(p.caption?.length || 0) > 180 ? '...' : ''}</p>
+                {p.hashtags && <p className="text-xs mb-3" style={{ color: '#3d6bc4' }}>{p.hashtags.split(' ').slice(0, 5).join(' ')}</p>}
+                {hasMetrics && (
+                  <div className="flex items-center gap-3 mb-3 p-2 rounded-lg" style={{ background: '#fbf8f1' }}>
+                    <div className="flex items-center gap-1 text-xs" style={{ color: '#c43d2c' }}><Heart size={11} /> {p.likes || 0}</div>
+                    <div className="flex items-center gap-1 text-xs" style={{ color: '#3d6bc4' }}><MessageSquare size={11} /> {p.comments || 0}</div>
+                    <div className="flex items-center gap-1 text-xs" style={{ color: '#6b6358' }}><Eye size={11} /> {p.reach || 0}</div>
                   </div>
                 )}
+                {p.status === 'scheduled' && <div className="flex gap-2 pt-3" style={{ borderTop: '1px solid #ece4d2' }}><button onClick={(e) => { e.stopPropagation(); updateStatus(p.id, 'published'); }} className="flex-1 text-xs py-1.5 rounded-full font-medium" style={{ background: '#dde9d9', color: '#3d5a36' }}>Mark published</button></div>}
               </button>
             );
           })}
@@ -1018,83 +825,354 @@ function CalendarView({ posts, clients, updateStatus, onAdd, onEdit }) {
   );
 }
 
-/* ════════════════════════════  SHEETS VIEW  ════════════════════════════ */
+/* ════════════════════════════  REPORTS VIEW  ════════════════════════════ */
+function ReportsView({ tasks, team, teams, clients, posts, comms, igReports, onAddIgReport, onEditIgReport, onEditPost }) {
+  const [tab, setTab] = useState('overview');
+  const [period, setPeriod] = useState('month');
+
+  const periodTasks = tasks.filter(t => isInPeriod(t.createdAt, period));
+  const periodPosts = posts.filter(p => isInPeriod(p.scheduledDate, period));
+  const periodComms = comms.filter(c => isInPeriod(c.date, period));
+  const periodLabel = period === 'week' ? 'Last 7 days' : period === 'month' ? 'Last 30 days' : period === 'quarter' ? 'Last 90 days' : 'All time';
+
+  return (
+    <div className="fade-in">
+      <header className="mb-8 flex items-end justify-between">
+        <div><p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Performance</p><h1 className="display text-5xl font-light">Reports</h1></div>
+      </header>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex gap-2">
+          {[{ id: 'overview', label: 'Overview' }, { id: 'team', label: 'Team' }, { id: 'posts', label: 'Posts' }, { id: 'instagram', label: 'Instagram' }].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} className="px-4 py-2 rounded-full text-sm" style={{ background: tab === t.id ? '#1a1814' : 'transparent', color: tab === t.id ? '#fff' : '#1a1814', border: '1px solid #d4ccbc' }}>{t.label}</button>
+          ))}
+        </div>
+        {tab !== 'instagram' && (
+          <div className="flex gap-1 p-1 rounded-full" style={{ background: '#fff', border: '1px solid #ece4d2' }}>
+            {[{ id: 'week', label: 'Week' }, { id: 'month', label: 'Month' }, { id: 'quarter', label: 'Quarter' }, { id: 'all', label: 'All' }].map(p => (
+              <button key={p.id} onClick={() => setPeriod(p.id)} className="px-3 py-1 rounded-full text-xs" style={{ background: period === p.id ? '#1a1814' : 'transparent', color: period === p.id ? '#fff' : '#1a1814' }}>{p.label}</button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {tab === 'overview' && <OverviewReport periodTasks={periodTasks} periodPosts={periodPosts} periodComms={periodComms} clients={clients} periodLabel={periodLabel} />}
+      {tab === 'team' && <TeamReport team={team} teams={teams} periodTasks={periodTasks} tasks={tasks} periodLabel={periodLabel} />}
+      {tab === 'posts' && <PostsReport periodPosts={periodPosts} clients={clients} onEditPost={onEditPost} periodLabel={periodLabel} />}
+      {tab === 'instagram' && <InstagramReport reports={igReports} clients={clients} onAdd={onAddIgReport} onEdit={onEditIgReport} />}
+    </div>
+  );
+}
+
+function OverviewReport({ periodTasks, periodPosts, periodComms, clients, periodLabel }) {
+  const completed = periodTasks.filter(t => t.status === 'done').length;
+  const inProgress = periodTasks.filter(t => t.status === 'progress').length;
+  const blocked = periodTasks.filter(t => t.status === 'blocked').length;
+  const published = periodPosts.filter(p => p.status === 'published').length;
+  const scheduled = periodPosts.filter(p => p.status === 'scheduled').length;
+  const completionRate = periodTasks.length > 0 ? Math.round((completed / periodTasks.length) * 100) : 0;
+
+  const clientActivity = clients.map(c => ({
+    name: c.name,
+    color: '#1a1814',
+    posts: periodPosts.filter(p => p.clientId === c.id).length,
+    tasks: periodTasks.filter(t => t.clientId === c.id).length,
+    comms: periodComms.filter(co => co.clientId === c.id).length
+  })).filter(c => c.posts + c.tasks + c.comms > 0).sort((a, b) => (b.posts + b.tasks + b.comms) - (a.posts + a.tasks + a.comms));
+  const maxActivity = Math.max(...clientActivity.map(c => c.posts + c.tasks + c.comms), 1);
+
+  return (
+    <>
+      <p className="text-sm mb-4" style={{ color: '#6b6358' }}>{periodLabel}</p>
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="card"><p className="text-xs mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Tasks created</p><p className="display text-4xl font-light">{periodTasks.length}</p><p className="text-xs mt-1" style={{ color: '#6b6358' }}>{completed} completed · {inProgress} in progress</p></div>
+        <div className="card"><p className="text-xs mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Completion rate</p><p className="display text-4xl font-light" style={{ color: completionRate > 70 ? '#3d5a36' : completionRate > 40 ? '#a04a1a' : '#c43d2c' }}>{completionRate}%</p><p className="text-xs mt-1" style={{ color: '#6b6358' }}>{blocked > 0 ? `${blocked} blocked` : 'All flowing'}</p></div>
+        <div className="card"><p className="text-xs mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Posts</p><p className="display text-4xl font-light">{published}</p><p className="text-xs mt-1" style={{ color: '#6b6358' }}>published · {scheduled} scheduled</p></div>
+        <div className="card"><p className="text-xs mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Client touches</p><p className="display text-4xl font-light">{periodComms.length}</p><p className="text-xs mt-1" style={{ color: '#6b6358' }}>logged interactions</p></div>
+      </div>
+
+      <div className="card">
+        <h3 className="display text-2xl mb-5">Client activity</h3>
+        {clientActivity.length === 0 ? <p className="text-sm py-4" style={{ color: '#6b6358' }}>No client activity in this period.</p> : (
+          <div className="space-y-3">
+            {clientActivity.map((c, i) => {
+              const total = c.posts + c.tasks + c.comms;
+              const pct = (total / maxActivity) * 100;
+              return (
+                <div key={i}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-sm font-semibold">{c.name}</p>
+                    <p className="text-xs" style={{ color: '#6b6358' }}>{c.posts} posts · {c.tasks} tasks · {c.comms} touches</p>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: '#fbf8f1' }}>
+                    <div className="h-full bar-fill" style={{ width: pct + '%', background: '#1a1814' }}></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function TeamReport({ team, teams, periodTasks, tasks, periodLabel }) {
+  const memberStats = team.map(m => {
+    const all = tasks.filter(t => t.assigneeId === m.id);
+    const period = periodTasks.filter(t => t.assigneeId === m.id);
+    const periodTeam = teams.find(tm => tm.id === m.teamId);
+    return {
+      ...m,
+      teamName: periodTeam?.name,
+      teamColor: periodTeam?.color,
+      total: all.length,
+      periodTotal: period.length,
+      completed: all.filter(t => t.status === 'done').length,
+      active: all.filter(t => t.status !== 'done').length,
+      periodCompleted: period.filter(t => t.status === 'done').length,
+    };
+  }).sort((a, b) => b.periodCompleted - a.periodCompleted);
+
+  const teamStats = teams.map(t => {
+    const members = team.filter(m => m.teamId === t.id);
+    const teamTasks = periodTasks.filter(task => members.some(m => m.id === task.assigneeId));
+    return {
+      ...t,
+      memberCount: members.length,
+      tasksCreated: teamTasks.length,
+      tasksCompleted: teamTasks.filter(task => task.status === 'done').length,
+    };
+  }).sort((a, b) => b.tasksCompleted - a.tasksCompleted);
+
+  const maxTeamCompleted = Math.max(...teamStats.map(t => t.tasksCompleted), 1);
+  const maxMemberCompleted = Math.max(...memberStats.map(m => m.periodCompleted), 1);
+
+  return (
+    <>
+      <p className="text-sm mb-4" style={{ color: '#6b6358' }}>{periodLabel}</p>
+      <div className="grid grid-cols-2 gap-6">
+        <div className="card">
+          <h3 className="display text-2xl mb-5">By team</h3>
+          {teamStats.length === 0 ? <p className="text-sm py-4" style={{ color: '#6b6358' }}>No teams yet.</p> : (
+            <div className="space-y-4">
+              {teamStats.map(t => (
+                <div key={t.id}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ background: t.color || '#1a1814' }}></div>
+                      <p className="text-sm font-semibold">{t.name}</p>
+                      <span className="text-xs" style={{ color: '#6b6358' }}>· {t.memberCount} {t.memberCount === 1 ? 'member' : 'members'}</span>
+                    </div>
+                    <p className="text-xs font-semibold">{t.tasksCompleted} done</p>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: '#fbf8f1' }}>
+                    <div className="h-full bar-fill" style={{ width: ((t.tasksCompleted / maxTeamCompleted) * 100) + '%', background: t.color || '#1a1814' }}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="card">
+          <h3 className="display text-2xl mb-5">Top performers</h3>
+          {memberStats.length === 0 ? <p className="text-sm py-4" style={{ color: '#6b6358' }}>Add team members to see performance.</p> : (
+            <div className="space-y-3">
+              {memberStats.slice(0, 8).map((m, i) => (
+                <div key={m.id} className="flex items-center gap-3">
+                  <div className="w-6 text-center">
+                    {i < 3 ? <span className="display text-lg" style={{ color: ['#c43d2c', '#a04a1a', '#6b6358'][i] }}>{i + 1}</span> : <span className="text-xs" style={{ color: '#a8a094' }}>{i + 1}</span>}
+                  </div>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ background: '#1a1814', color: '#f6f1e8' }}>{m.name[0]?.toUpperCase()}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{m.name}</p>
+                    <div className="flex items-center gap-2"><p className="text-xs" style={{ color: '#6b6358' }}>{m.role || '—'}</p>{m.teamName && <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: (m.teamColor || '#1a1814') + '20', color: m.teamColor || '#1a1814' }}>{m.teamName}</span>}</div>
+                  </div>
+                  <div className="text-right">
+                    <p className="display text-xl">{m.periodCompleted}</p>
+                    <p className="text-xs" style={{ color: '#6b6358' }}>completed</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PostsReport({ periodPosts, clients, onEditPost, periodLabel }) {
+  const published = periodPosts.filter(p => p.status === 'published');
+  const totalLikes = published.reduce((s, p) => s + (p.likes || 0), 0);
+  const totalComments = published.reduce((s, p) => s + (p.comments || 0), 0);
+  const totalReach = published.reduce((s, p) => s + (p.reach || 0), 0);
+  const totalSaves = published.reduce((s, p) => s + (p.saves || 0), 0);
+
+  const byPlatform = PLATFORMS.map(pl => ({
+    ...pl,
+    count: published.filter(p => p.platform === pl.id).length,
+    reach: published.filter(p => p.platform === pl.id).reduce((s, p) => s + (p.reach || 0), 0),
+  })).filter(p => p.count > 0);
+
+  const topPosts = published.filter(p => (p.reach || 0) + (p.likes || 0) > 0).sort((a, b) => ((b.reach || 0) + (b.likes || 0) * 100) - ((a.reach || 0) + (a.likes || 0) * 100)).slice(0, 6);
+
+  return (
+    <>
+      <p className="text-sm mb-4" style={{ color: '#6b6358' }}>{periodLabel} · {published.length} published</p>
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="card"><div className="flex items-center gap-2 mb-2"><Heart size={14} color="#c43d2c" /><p className="text-xs" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Likes</p></div><p className="display text-3xl">{totalLikes.toLocaleString()}</p></div>
+        <div className="card"><div className="flex items-center gap-2 mb-2"><MessageSquare size={14} color="#3d6bc4" /><p className="text-xs" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Comments</p></div><p className="display text-3xl">{totalComments.toLocaleString()}</p></div>
+        <div className="card"><div className="flex items-center gap-2 mb-2"><Eye size={14} color="#6b6358" /><p className="text-xs" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Reach</p></div><p className="display text-3xl">{totalReach.toLocaleString()}</p></div>
+        <div className="card"><div className="flex items-center gap-2 mb-2"><BarChart3 size={14} color="#3d5a36" /><p className="text-xs" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Saves</p></div><p className="display text-3xl">{totalSaves.toLocaleString()}</p></div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-6">
+        <div className="card">
+          <h3 className="display text-2xl mb-5">By platform</h3>
+          {byPlatform.length === 0 ? <p className="text-sm py-4" style={{ color: '#6b6358' }}>No published posts in this period.</p> : (
+            <div className="space-y-3">
+              {byPlatform.map(p => {
+                const PIcon = p.icon;
+                return (
+                  <div key={p.id} className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: p.color }}><PIcon size={14} color="#fff" /></div>
+                    <div className="flex-1"><p className="text-sm font-semibold">{p.name}</p><p className="text-xs" style={{ color: '#6b6358' }}>{p.reach.toLocaleString()} reach</p></div>
+                    <p className="display text-xl">{p.count}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="col-span-2 card">
+          <h3 className="display text-2xl mb-5">Top performing</h3>
+          {topPosts.length === 0 ? <p className="text-sm py-4" style={{ color: '#6b6358' }}>Add metrics to your published posts to see top performers.</p> : (
+            <div className="space-y-2">
+              {topPosts.map(p => {
+                const platform = PLATFORMS.find(pl => pl.id === p.platform);
+                const PIcon = platform?.icon || Instagram;
+                const client = clients.find(c => c.id === p.clientId);
+                return (
+                  <button key={p.id} onClick={() => onEditPost(p)} className="w-full flex items-center gap-3 p-3 rounded-xl text-left hover-lift" style={{ background: '#fbf8f1' }}>
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: platform?.color || '#1a1814' }}><PIcon size={14} color="#fff" /></div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{p.caption?.slice(0, 60) || 'Untitled'}{(p.caption?.length || 0) > 60 ? '...' : ''}</p>
+                      <p className="text-xs" style={{ color: '#6b6358' }}>{client?.name || 'Unassigned'} · {formatDate(p.scheduledDate)}</p>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="flex items-center gap-1" style={{ color: '#c43d2c' }}><Heart size={11} /> {p.likes || 0}</span>
+                      <span className="flex items-center gap-1" style={{ color: '#6b6358' }}><Eye size={11} /> {(p.reach || 0).toLocaleString()}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function InstagramReport({ reports, clients, onAdd, onEdit }) {
+  const sorted = [...reports].sort((a, b) => (b.month || '').localeCompare(a.month || ''));
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm" style={{ color: '#6b6358' }}>Monthly Instagram performance reports per client</p>
+        <button className="btn-primary" onClick={onAdd}><Plus size={14} /> Add monthly report</button>
+      </div>
+      {sorted.length === 0 ? <EmptyState icon={Instagram} title="No Instagram reports yet" description="Track monthly Instagram performance for each client — followers, reach, engagement, and growth." action={onAdd} actionLabel="Add first report" /> : (
+        <div className="grid grid-cols-2 gap-4">
+          {sorted.map(r => {
+            const client = clients.find(c => c.id === r.clientId);
+            const growthPct = r.followers > 0 ? ((r.followersGained / r.followers) * 100).toFixed(1) : 0;
+            return (
+              <button key={r.id} onClick={() => onEdit(r)} className="card hover-lift text-left">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: '#c43d6e' }}><Instagram size={18} color="#fff" /></div>
+                    <p className="text-xs" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{client?.name || 'No client'}</p>
+                    <h3 className="display text-2xl">{formatMonth(r.month)}</h3>
+                  </div>
+                  <Edit2 size={14} color="#a8a094" />
+                </div>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="p-3 rounded-lg" style={{ background: '#fbf8f1' }}>
+                    <p className="text-xs" style={{ color: '#6b6358' }}>Followers</p>
+                    <p className="display text-xl">{(r.followers || 0).toLocaleString()}</p>
+                    {r.followersGained > 0 && <p className="text-xs" style={{ color: '#3d5a36' }}>+{r.followersGained.toLocaleString()} ({growthPct}%)</p>}
+                  </div>
+                  <div className="p-3 rounded-lg" style={{ background: '#fbf8f1' }}>
+                    <p className="text-xs" style={{ color: '#6b6358' }}>Reach</p>
+                    <p className="display text-xl">{(r.reach || 0).toLocaleString()}</p>
+                    <p className="text-xs" style={{ color: '#6b6358' }}>{(r.impressions || 0).toLocaleString()} imp.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 text-xs pt-2" style={{ borderTop: '1px solid #ece4d2', color: '#6b6358' }}>
+                  <span>{r.totalPosts || 0} posts</span>
+                  <span>{r.totalReels || 0} reels</span>
+                  <span>{r.totalStories || 0} stories</span>
+                  {r.engagementRate > 0 && <span style={{ marginLeft: 'auto', color: '#1a1814', fontWeight: 600 }}>{r.engagementRate}% ER</span>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ════════════════════════════  SHEETS / STRATEGY VIEWS  ════════════════════════════ */
 function SheetsView({ sheets, onAdd, onEdit }) {
   return (
     <div className="fade-in">
       <header className="mb-8 flex items-end justify-between">
-        <div>
-          <p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Quick access</p>
-          <h1 className="display text-5xl font-light">Sheets</h1>
-        </div>
+        <div><p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Quick access</p><h1 className="display text-5xl font-light">Sheets</h1></div>
         <button className="btn-primary" onClick={onAdd}><Plus size={16} /> Add sheet</button>
       </header>
-      {sheets.length === 0 ? (
-        <EmptyState icon={Table2} title="No sheets linked"
-          description="Save links to all your tracking sheets, content calendars, and reports here for one-click access."
-          action={onAdd} actionLabel="Add a sheet" />
-      ) : (
-        <div className="grid grid-cols-3 gap-4">
-          {sheets.map(s => (
-            <div key={s.id} className="card hover-lift">
-              <div className="flex items-start justify-between mb-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#3d5a36' }}>
-                  <FileSpreadsheet size={18} color="#fff" />
-                </div>
-                <button onClick={() => onEdit(s)} className="p-1 rounded-md" style={{ color: '#a8a094' }}>
-                  <Edit2 size={14} />
-                </button>
-              </div>
-              <p className="font-semibold mb-1">{s.name}</p>
-              {s.description && <p className="text-xs mb-3" style={{ color: '#6b6358' }}>{s.description}</p>}
-              {s.tag && <span className="inline-block text-xs px-2 py-0.5 rounded-full mb-3" style={{ background: '#fbf8f1', color: '#6b6358', border: '1px solid #ece4d2' }}>{s.tag}</span>}
-              <a href={s.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm font-medium" style={{ color: '#c43d2c' }}>
-                Open sheet <ExternalLink size={12} />
-              </a>
-            </div>
-          ))}
-        </div>
+      {sheets.length === 0 ? <EmptyState icon={Table2} title="No sheets linked" description="Save links to all your tracking sheets, content calendars, and reports here for one-click access." action={onAdd} actionLabel="Add a sheet" /> : (
+        <div className="grid grid-cols-3 gap-4">{sheets.map(s => (
+          <div key={s.id} className="card hover-lift">
+            <div className="flex items-start justify-between mb-3"><div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#3d5a36' }}><FileSpreadsheet size={18} color="#fff" /></div><button onClick={() => onEdit(s)} className="p-1 rounded-md" style={{ color: '#a8a094' }}><Edit2 size={14} /></button></div>
+            <p className="font-semibold mb-1">{s.name}</p>
+            {s.description && <p className="text-xs mb-3" style={{ color: '#6b6358' }}>{s.description}</p>}
+            {s.tag && <span className="inline-block text-xs px-2 py-0.5 rounded-full mb-3" style={{ background: '#fbf8f1', color: '#6b6358', border: '1px solid #ece4d2' }}>{s.tag}</span>}
+            <a href={s.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm font-medium" style={{ color: '#c43d2c' }}>Open sheet <ExternalLink size={12} /></a>
+          </div>
+        ))}</div>
       )}
     </div>
   );
 }
 
-/* ════════════════════════════  STRATEGY VIEW  ════════════════════════════ */
 function StrategyView({ strategies, clients, onAdd, onEdit }) {
   return (
     <div className="fade-in">
       <header className="mb-8 flex items-end justify-between">
-        <div>
-          <p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Ideas</p>
-          <h1 className="display text-5xl font-light">Strategy</h1>
-        </div>
+        <div><p className="text-sm mb-2" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Ideas</p><h1 className="display text-5xl font-light">Strategy</h1></div>
         <button className="btn-primary" onClick={onAdd}><Plus size={16} /> New strategy</button>
       </header>
-      {strategies.length === 0 ? (
-        <EmptyState icon={Lightbulb} title="No strategies yet"
-          description="Capture your campaign ideas, content pillars, and growth plans before they slip away."
-          action={onAdd} actionLabel="Create first strategy" />
-      ) : (
-        <div className="grid grid-cols-2 gap-4">
-          {strategies.slice().reverse().map(s => {
-            const client = clients.find(c => c.id === s.clientId);
-            return (
-              <button key={s.id} onClick={() => onEdit(s)} className="card hover-lift text-left">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {client && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#fbf8f1', color: '#6b6358', border: '1px solid #ece4d2' }}>{client.name}</span>}
-                    {s.tags && s.tags.split(',').slice(0, 2).map((t, i) => (
-                      <span key={i} className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#fdf0ec', color: '#a04a1a' }}>{t.trim()}</span>
-                    ))}
-                  </div>
-                  <span className="text-xs" style={{ color: '#a8a094' }}>{formatDate(s.createdAt)}</span>
+      {strategies.length === 0 ? <EmptyState icon={Lightbulb} title="No strategies yet" description="Capture your campaign ideas, content pillars, and growth plans before they slip away." action={onAdd} actionLabel="Create first strategy" /> : (
+        <div className="grid grid-cols-2 gap-4">{strategies.slice().reverse().map(s => {
+          const client = clients.find(c => c.id === s.clientId);
+          return (
+            <button key={s.id} onClick={() => onEdit(s)} className="card hover-lift text-left">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {client && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#fbf8f1', color: '#6b6358', border: '1px solid #ece4d2' }}>{client.name}</span>}
+                  {s.tags && s.tags.split(',').slice(0, 2).map((t, i) => <span key={i} className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#fdf0ec', color: '#a04a1a' }}>{t.trim()}</span>)}
                 </div>
-                <h3 className="display text-2xl mb-2 leading-tight">{s.title}</h3>
-                <p className="text-sm leading-relaxed" style={{ color: '#3a3530', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.content}</p>
-              </button>
-            );
-          })}
-        </div>
+                <span className="text-xs" style={{ color: '#a8a094' }}>{formatDate(s.createdAt)}</span>
+              </div>
+              <h3 className="display text-2xl mb-2 leading-tight">{s.title}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: '#3a3530', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.content}</p>
+            </button>
+          );
+        })}</div>
       )}
     </div>
   );
@@ -1103,9 +1181,7 @@ function StrategyView({ strategies, clients, onAdd, onEdit }) {
 function EmptyState({ icon: IconComp, title, description, action, actionLabel }) {
   return (
     <div className="card text-center py-20">
-      <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: '#fbf8f1', border: '1px solid #ece4d2', margin: '0 auto 20px' }}>
-        <IconComp size={24} color="#6b6358" />
-      </div>
+      <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: '#fbf8f1', border: '1px solid #ece4d2', margin: '0 auto 20px' }}><IconComp size={24} color="#6b6358" /></div>
       <h3 className="display text-2xl mb-2">{title}</h3>
       <p className="text-sm mb-6" style={{ color: '#6b6358', maxWidth: 380, margin: '0 auto 24px' }}>{description}</p>
       <button className="btn-primary" onClick={action}><Plus size={14} /> {actionLabel}</button>
@@ -1114,46 +1190,24 @@ function EmptyState({ icon: IconComp, title, description, action, actionLabel })
 }
 
 /* ════════════════════════════  MODALS  ════════════════════════════ */
-function ModalShell({ title, onClose, onDelete, children, onSave }) {
+function ModalShell({ title, onClose, onDelete, children, onSave, saveLabel = 'Save', size = 520 }) {
   const [saving, setSaving] = useState(false);
-  const handleSave = async () => {
-    setSaving(true);
-    try { await onSave(); } finally { setSaving(false); }
-  };
+  const handleSave = async () => { setSaving(true); try { await onSave(); } finally { setSaving(false); } };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(26, 24, 20, 0.5)' }} onClick={onClose}>
-      <div className="rounded-2xl w-full fade-in scroll-area" style={{ background: '#fff', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid #ece4d2' }}>
-          <h2 className="display text-2xl">{title}</h2>
-          <button onClick={onClose} style={{ color: '#6b6358' }}><X size={20} /></button>
-        </div>
+      <div className="rounded-2xl w-full fade-in scroll-area" style={{ background: '#fff', maxWidth: size, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid #ece4d2' }}><h2 className="display text-2xl">{title}</h2><button onClick={onClose} style={{ color: '#6b6358' }}><X size={20} /></button></div>
         <div className="p-5">{children}</div>
         <div className="flex items-center justify-between p-5" style={{ borderTop: '1px solid #ece4d2' }}>
-          <div>
-            {onDelete && (
-              <button onClick={async () => { if (window.confirm('Delete this item?')) await onDelete(); }}
-                className="text-sm font-medium flex items-center gap-1.5" style={{ color: '#c43d2c' }}>
-                <Trash2 size={13} /> Delete
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button className="btn-ghost" onClick={onClose}>Cancel</button>
-            <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
-          </div>
+          <div>{onDelete && <button onClick={async () => { if (window.confirm('Delete this item?')) await onDelete(); }} className="text-sm font-medium flex items-center gap-1.5" style={{ color: '#c43d2c' }}><Trash2 size={13} /> Delete</button>}</div>
+          <div className="flex gap-2"><button className="btn-ghost" onClick={onClose}>Cancel</button><button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : saveLabel}</button></div>
         </div>
       </div>
     </div>
   );
 }
-
 function Field({ label, children }) {
-  return (
-    <div className="mb-4">
-      <label className="block text-xs mb-1.5 font-semibold" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>
-      {children}
-    </div>
-  );
+  return <div className="mb-4"><label className="block text-xs mb-1.5 font-semibold" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>{children}</div>;
 }
 
 function TaskModal({ task, team, clients, onSave, onDelete, onClose }) {
@@ -1164,43 +1218,50 @@ function TaskModal({ task, team, clients, onSave, onDelete, onClose }) {
       <Field label="Title"><input className="input-field" value={data.title} onChange={e => update('title', e.target.value)} placeholder="What needs doing?" /></Field>
       <Field label="Description"><textarea className="input-field" rows={3} value={data.description || ''} onChange={e => update('description', e.target.value)} placeholder="Add context, brief, or notes..." /></Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Status">
-          <select className="input-field" value={data.status} onChange={e => update('status', e.target.value)}>
-            <option value="todo">To do</option><option value="progress">In progress</option>
-            <option value="review">Review</option><option value="done">Done</option><option value="blocked">Blocked</option>
-          </select>
-        </Field>
-        <Field label="Priority">
-          <select className="input-field" value={data.priority} onChange={e => update('priority', e.target.value)}>
-            <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-          </select>
-        </Field>
+        <Field label="Status"><select className="input-field" value={data.status} onChange={e => update('status', e.target.value)}><option value="todo">To do</option><option value="progress">In progress</option><option value="review">Review</option><option value="done">Done</option><option value="blocked">Blocked</option></select></Field>
+        <Field label="Priority"><select className="input-field" value={data.priority} onChange={e => update('priority', e.target.value)}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></Field>
         <Field label="Due date"><input type="date" className="input-field" value={data.dueDate || ''} onChange={e => update('dueDate', e.target.value)} /></Field>
-        <Field label="Assignee">
-          <select className="input-field" value={data.assigneeId || ''} onChange={e => update('assigneeId', e.target.value)}>
-            <option value="">Unassigned</option>
-            {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </Field>
+        <Field label="Assignee"><select className="input-field" value={data.assigneeId || ''} onChange={e => update('assigneeId', e.target.value)}><option value="">Unassigned</option>{team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
       </div>
-      <Field label="Client">
-        <select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}>
-          <option value="">No client</option>
-          {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </Field>
+      <Field label="Client"><select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}><option value="">No client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
     </ModalShell>
   );
 }
 
-function MemberModal({ member, onSave, onDelete, onClose }) {
-  const [data, setData] = useState(member || { name: '', role: '', email: '' });
+function MemberModal({ member, teams, initialTeamId, onSave, onDelete, onClose }) {
+  const [data, setData] = useState(member || { name: '', role: '', email: '', teamId: initialTeamId || '' });
   const update = (k, v) => setData({ ...data, [k]: v });
   return (
     <ModalShell title={member ? 'Edit member' : 'Add team member'} onClose={onClose} onDelete={onDelete} onSave={() => data.name.trim() && onSave(data)}>
       <Field label="Name"><input className="input-field" value={data.name} onChange={e => update('name', e.target.value)} placeholder="Full name" /></Field>
-      <Field label="Role"><input className="input-field" value={data.role || ''} onChange={e => update('role', e.target.value)} placeholder="e.g. Designer, Copywriter" /></Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Role"><input className="input-field" value={data.role || ''} onChange={e => update('role', e.target.value)} placeholder="e.g. Designer" /></Field>
+        <Field label="Team">
+          <select className="input-field" value={data.teamId || ''} onChange={e => update('teamId', e.target.value)}>
+            <option value="">No team</option>
+            {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </Field>
+      </div>
       <Field label="Email"><input className="input-field" type="email" value={data.email || ''} onChange={e => update('email', e.target.value)} placeholder="email@domain.com" /></Field>
+    </ModalShell>
+  );
+}
+
+function TeamFolderModal({ team, onSave, onDelete, onClose }) {
+  const [data, setData] = useState(team || { name: '', description: '', color: TEAM_COLORS[0], sortOrder: 99 });
+  const update = (k, v) => setData({ ...data, [k]: v });
+  return (
+    <ModalShell title={team ? 'Edit team' : 'New team'} onClose={onClose} onDelete={onDelete} onSave={() => data.name.trim() && onSave(data)}>
+      <Field label="Team name"><input className="input-field" value={data.name} onChange={e => update('name', e.target.value)} placeholder="e.g. Design Team" /></Field>
+      <Field label="Description"><input className="input-field" value={data.description || ''} onChange={e => update('description', e.target.value)} placeholder="What does this team do?" /></Field>
+      <Field label="Color">
+        <div className="flex gap-2 flex-wrap">
+          {TEAM_COLORS.map(c => (
+            <button key={c} onClick={() => update('color', c)} className="w-8 h-8 rounded-full transition-all" style={{ background: c, border: data.color === c ? '3px solid #1a1814' : '3px solid transparent', boxShadow: data.color === c ? '0 0 0 1px #fff inset' : 'none' }}></button>
+          ))}
+        </div>
+      </Field>
     </ModalShell>
   );
 }
@@ -1213,52 +1274,44 @@ function ClientModal({ client, onSave, onDelete, onClose }) {
       <Field label="Client / Brand"><input className="input-field" value={data.name} onChange={e => update('name', e.target.value)} placeholder="Brand name" /></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Contact person"><input className="input-field" value={data.contactName || ''} onChange={e => update('contactName', e.target.value)} placeholder="Name" /></Field>
-        <Field label="Status">
-          <select className="input-field" value={data.status} onChange={e => update('status', e.target.value)}>
-            <option value="active">Active</option><option value="paused">Paused</option>
-            <option value="onboarding">Onboarding</option><option value="archived">Archived</option>
-          </select>
-        </Field>
+        <Field label="Status"><select className="input-field" value={data.status} onChange={e => update('status', e.target.value)}><option value="active">Active</option><option value="paused">Paused</option><option value="onboarding">Onboarding</option><option value="archived">Archived</option></select></Field>
       </div>
       <Field label="Email / Phone"><input className="input-field" value={data.contactInfo || ''} onChange={e => update('contactInfo', e.target.value)} placeholder="Email, phone, or both" /></Field>
       <Field label="Platforms"><input className="input-field" value={data.platforms || ''} onChange={e => update('platforms', e.target.value)} placeholder="Instagram, Facebook, LinkedIn..." /></Field>
-      <Field label="Notes"><textarea className="input-field" rows={4} value={data.notes || ''} onChange={e => update('notes', e.target.value)} placeholder="Brand voice, preferences, key contacts..." /></Field>
+      <Field label="Notes"><textarea className="input-field" rows={4} value={data.notes || ''} onChange={e => update('notes', e.target.value)} placeholder="Brand voice, preferences..." /></Field>
     </ModalShell>
   );
 }
 
 function PostModal({ post, clients, onSave, onDelete, onClose }) {
-  const [data, setData] = useState(post ? {
-    ...post,
-    scheduledDate: post.scheduledDate ? new Date(post.scheduledDate).toISOString().slice(0, 16) : ''
-  } : { caption: '', platform: 'instagram', clientId: '', scheduledDate: '', status: 'scheduled', hashtags: '', notes: '' });
+  const [data, setData] = useState(post ? { ...post, scheduledDate: post.scheduledDate ? new Date(post.scheduledDate).toISOString().slice(0, 16) : '' } : { caption: '', platform: 'instagram', clientId: '', scheduledDate: '', status: 'scheduled', hashtags: '', notes: '', likes: 0, comments: 0, reach: 0, saves: 0, shares: 0 });
   const update = (k, v) => setData({ ...data, [k]: v });
+  const updateNum = (k, v) => setData({ ...data, [k]: v === '' ? 0 : parseInt(v, 10) || 0 });
   return (
     <ModalShell title={post ? 'Edit post' : 'Schedule post'} onClose={onClose} onDelete={onDelete} onSave={() => onSave(data)}>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Client">
-          <select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}>
-            <option value="">Select client</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Platform">
-          <select className="input-field" value={data.platform} onChange={e => update('platform', e.target.value)}>
-            {PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </Field>
+        <Field label="Client"><select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}><option value="">Select client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        <Field label="Platform"><select className="input-field" value={data.platform} onChange={e => update('platform', e.target.value)}>{PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
       </div>
       <Field label="Caption"><textarea className="input-field" rows={5} value={data.caption || ''} onChange={e => update('caption', e.target.value)} placeholder="Write your post copy..." /></Field>
       <Field label="Hashtags"><textarea className="input-field" rows={2} value={data.hashtags || ''} onChange={e => update('hashtags', e.target.value)} placeholder="#brand #marketing #social" /></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Schedule for"><input type="datetime-local" className="input-field" value={data.scheduledDate || ''} onChange={e => update('scheduledDate', e.target.value)} /></Field>
-        <Field label="Status">
-          <select className="input-field" value={data.status} onChange={e => update('status', e.target.value)}>
-            <option value="draft">Draft</option><option value="scheduled">Scheduled</option><option value="published">Published</option>
-          </select>
-        </Field>
+        <Field label="Status"><select className="input-field" value={data.status} onChange={e => update('status', e.target.value)}><option value="draft">Draft</option><option value="scheduled">Scheduled</option><option value="published">Published</option></select></Field>
       </div>
-      <Field label="Notes"><textarea className="input-field" rows={2} value={data.notes || ''} onChange={e => update('notes', e.target.value)} placeholder="Image link, asset notes..." /></Field>
+      {data.status === 'published' && (
+        <div className="mt-2 p-4 rounded-xl" style={{ background: '#fbf8f1', border: '1px solid #ece4d2' }}>
+          <p className="text-xs mb-3 font-semibold" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Performance metrics</p>
+          <div className="grid grid-cols-3 gap-2">
+            <Field label="Likes"><input type="number" min="0" className="input-field" value={data.likes || 0} onChange={e => updateNum('likes', e.target.value)} /></Field>
+            <Field label="Comments"><input type="number" min="0" className="input-field" value={data.comments || 0} onChange={e => updateNum('comments', e.target.value)} /></Field>
+            <Field label="Reach"><input type="number" min="0" className="input-field" value={data.reach || 0} onChange={e => updateNum('reach', e.target.value)} /></Field>
+            <Field label="Saves"><input type="number" min="0" className="input-field" value={data.saves || 0} onChange={e => updateNum('saves', e.target.value)} /></Field>
+            <Field label="Shares"><input type="number" min="0" className="input-field" value={data.shares || 0} onChange={e => updateNum('shares', e.target.value)} /></Field>
+          </div>
+        </div>
+      )}
+      <div className="mt-2"><Field label="Notes"><textarea className="input-field" rows={2} value={data.notes || ''} onChange={e => update('notes', e.target.value)} placeholder="Image link, asset notes..." /></Field></div>
     </ModalShell>
   );
 }
@@ -1283,15 +1336,10 @@ function StrategyModal({ strategy, clients, onSave, onDelete, onClose }) {
     <ModalShell title={strategy ? 'Edit strategy' : 'New strategy'} onClose={onClose} onDelete={onDelete} onSave={() => data.title.trim() && onSave(data)}>
       <Field label="Title"><input className="input-field" value={data.title} onChange={e => update('title', e.target.value)} placeholder="e.g. Q2 launch campaign" /></Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Client">
-          <select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}>
-            <option value="">No specific client</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
+        <Field label="Client"><select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}><option value="">No specific client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
         <Field label="Tags"><input className="input-field" value={data.tags || ''} onChange={e => update('tags', e.target.value)} placeholder="campaign, launch, growth" /></Field>
       </div>
-      <Field label="Strategy"><textarea className="input-field" rows={10} value={data.content || ''} onChange={e => update('content', e.target.value)} placeholder="Goals, target audience, content pillars, KPIs, timeline..." /></Field>
+      <Field label="Strategy"><textarea className="input-field" rows={10} value={data.content || ''} onChange={e => update('content', e.target.value)} placeholder="Goals, target audience, content pillars, KPIs..." /></Field>
     </ModalShell>
   );
 }
@@ -1302,21 +1350,51 @@ function CommModal({ comm, clients, onSave, onClose }) {
   return (
     <ModalShell title="Log communication" onClose={onClose} onSave={() => data.summary.trim() && onSave(data)}>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Client">
-          <select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}>
-            <option value="">Select client</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Type">
-          <select className="input-field" value={data.type} onChange={e => update('type', e.target.value)}>
-            <option value="meeting">Meeting</option><option value="call">Call</option>
-            <option value="email">Email</option><option value="message">Message</option><option value="note">Note</option>
-          </select>
-        </Field>
+        <Field label="Client"><select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}><option value="">Select client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        <Field label="Type"><select className="input-field" value={data.type} onChange={e => update('type', e.target.value)}><option value="meeting">Meeting</option><option value="call">Call</option><option value="email">Email</option><option value="message">Message</option><option value="note">Note</option></select></Field>
       </div>
       <Field label="Date & time"><input type="datetime-local" className="input-field" value={data.date} onChange={e => update('date', e.target.value)} /></Field>
-      <Field label="Summary"><textarea className="input-field" rows={5} value={data.summary} onChange={e => update('summary', e.target.value)} placeholder="What was discussed? Next steps? Decisions made?" /></Field>
+      <Field label="Summary"><textarea className="input-field" rows={5} value={data.summary} onChange={e => update('summary', e.target.value)} placeholder="What was discussed?" /></Field>
+    </ModalShell>
+  );
+}
+
+function IgReportModal({ report, clients, onSave, onDelete, onClose }) {
+  const [data, setData] = useState(report || { clientId: '', month: currentMonth(), followers: 0, followersGained: 0, reach: 0, impressions: 0, profileVisits: 0, websiteClicks: 0, engagementRate: 0, totalPosts: 0, totalStories: 0, totalReels: 0, notes: '' });
+  const update = (k, v) => setData({ ...data, [k]: v });
+  const updateNum = (k, v) => setData({ ...data, [k]: v === '' ? 0 : parseFloat(v) || 0 });
+  return (
+    <ModalShell title={report ? 'Edit Instagram report' : 'New Instagram report'} onClose={onClose} onDelete={onDelete} onSave={() => data.clientId && data.month && onSave(data)} size={620}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Client"><select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}><option value="">Select client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        <Field label="Month"><input type="month" className="input-field" value={data.month} onChange={e => update('month', e.target.value)} /></Field>
+      </div>
+      <div className="p-4 rounded-xl mb-4" style={{ background: '#fbf8f1', border: '1px solid #ece4d2' }}>
+        <p className="text-xs mb-3 font-semibold" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audience & growth</p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Total followers"><input type="number" min="0" className="input-field" value={data.followers || 0} onChange={e => updateNum('followers', e.target.value)} /></Field>
+          <Field label="Followers gained"><input type="number" className="input-field" value={data.followersGained || 0} onChange={e => updateNum('followersGained', e.target.value)} /></Field>
+          <Field label="Profile visits"><input type="number" min="0" className="input-field" value={data.profileVisits || 0} onChange={e => updateNum('profileVisits', e.target.value)} /></Field>
+          <Field label="Website clicks"><input type="number" min="0" className="input-field" value={data.websiteClicks || 0} onChange={e => updateNum('websiteClicks', e.target.value)} /></Field>
+        </div>
+      </div>
+      <div className="p-4 rounded-xl mb-4" style={{ background: '#fbf8f1', border: '1px solid #ece4d2' }}>
+        <p className="text-xs mb-3 font-semibold" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reach & engagement</p>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Reach"><input type="number" min="0" className="input-field" value={data.reach || 0} onChange={e => updateNum('reach', e.target.value)} /></Field>
+          <Field label="Impressions"><input type="number" min="0" className="input-field" value={data.impressions || 0} onChange={e => updateNum('impressions', e.target.value)} /></Field>
+          <Field label="Engagement %"><input type="number" min="0" step="0.01" className="input-field" value={data.engagementRate || 0} onChange={e => updateNum('engagementRate', e.target.value)} placeholder="3.5" /></Field>
+        </div>
+      </div>
+      <div className="p-4 rounded-xl mb-4" style={{ background: '#fbf8f1', border: '1px solid #ece4d2' }}>
+        <p className="text-xs mb-3 font-semibold" style={{ color: '#6b6358', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Content count</p>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Posts"><input type="number" min="0" className="input-field" value={data.totalPosts || 0} onChange={e => updateNum('totalPosts', e.target.value)} /></Field>
+          <Field label="Reels"><input type="number" min="0" className="input-field" value={data.totalReels || 0} onChange={e => updateNum('totalReels', e.target.value)} /></Field>
+          <Field label="Stories"><input type="number" min="0" className="input-field" value={data.totalStories || 0} onChange={e => updateNum('totalStories', e.target.value)} /></Field>
+        </div>
+      </div>
+      <Field label="Notes / observations"><textarea className="input-field" rows={3} value={data.notes || ''} onChange={e => update('notes', e.target.value)} placeholder="What worked? What didn't? Top performing content..." /></Field>
     </ModalShell>
   );
 }
