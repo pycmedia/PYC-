@@ -427,6 +427,183 @@ function exportTeamReportExcel(memberStats, teamStats, periodLabel, periodTasks)
   XLSX.writeFile(wb, 'team_report_' + periodLabel.toLowerCase().replace(/[^a-z0-9]/gi, '_') + '_' + today() + '.xlsx');
 }
 
+function generateMemberReportPDF(member, memberTeam, memberTasks, clients, periodLabel) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const margin = 40; let y = margin;
+
+  const accent = memberTeam?.color || '#e89177';
+  const hexToRgb = (h) => { const x = h.replace('#', ''); const v = parseInt(x.length === 3 ? x.split('').map(c => c + c).join('') : x, 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; };
+  const [ar, ag, ab] = hexToRgb(accent);
+
+  // Header band
+  doc.setFillColor(58, 45, 45); doc.rect(0, 0, pageW, 90, 'F');
+  doc.setFillColor(ar, ag, ab); doc.rect(0, 86, pageW, 4, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold').setFontSize(22);
+  doc.text('Performance Report', margin, 38);
+  doc.setFont('helvetica', 'normal').setFontSize(11);
+  doc.text((member.name || 'Member') + '  ·  ' + (memberTeam?.name || 'No team') + '  ·  ' + periodLabel, margin, 60);
+
+  y = 120;
+  doc.setTextColor(58, 45, 45);
+
+  // Profile block
+  doc.setFont('helvetica', 'bold').setFontSize(14);
+  doc.text('Profile', margin, y); y += 18;
+  doc.setFont('helvetica', 'normal').setFontSize(10);
+  doc.setTextColor(107, 88, 86);
+  const profileLines = [
+    'Role: ' + (member.role || '—'),
+    'Team: ' + (memberTeam?.name || 'Unassigned'),
+    'Email: ' + (member.email || '—'),
+    'WhatsApp: ' + (member.whatsapp || '—'),
+  ];
+  profileLines.forEach(line => { doc.text(line, margin, y); y += 14; });
+  y += 8;
+
+  // Period stats
+  const completed = memberTasks.filter(t => t.status === 'done').length;
+  const inProgress = memberTasks.filter(t => t.status === 'progress').length;
+  const todo = memberTasks.filter(t => t.status === 'todo').length;
+  const review = memberTasks.filter(t => t.status === 'review').length;
+  const blocked = memberTasks.filter(t => t.status === 'blocked').length;
+  const completionRate = memberTasks.length > 0 ? Math.round((completed / memberTasks.length) * 100) + '%' : '—';
+  const onTime = memberTasks.filter(t => t.status === 'done' && t.dueDate && t.completedAt && t.completedAt <= t.dueDate).length;
+  const onTimeRate = completed > 0 ? Math.round((onTime / completed) * 100) + '%' : '—';
+
+  doc.setTextColor(58, 45, 45);
+  doc.setFont('helvetica', 'bold').setFontSize(14);
+  doc.text('Workload summary', margin, y); y += 18;
+  drawMetricGrid(doc, [
+    { label: 'Total tasks', value: memberTasks.length },
+    { label: 'Completed', value: completed },
+    { label: 'In progress', value: inProgress },
+    { label: 'Completion rate', value: completionRate },
+  ], margin, y, pageW - margin * 2);
+  y += 80;
+
+  drawMetricGrid(doc, [
+    { label: 'To do', value: todo },
+    { label: 'In review', value: review },
+    { label: 'Blocked', value: blocked },
+    { label: 'On-time rate', value: onTimeRate },
+  ], margin, y, pageW - margin * 2);
+  y += 90;
+
+  // Tasks by client
+  const byClient = {};
+  memberTasks.forEach(t => {
+    const cName = clients.find(c => c.id === t.clientId)?.name || 'No client';
+    if (!byClient[cName]) byClient[cName] = { total: 0, done: 0 };
+    byClient[cName].total++;
+    if (t.status === 'done') byClient[cName].done++;
+  });
+  const clientRows = Object.entries(byClient).sort((a, b) => b[1].total - a[1].total);
+  if (clientRows.length > 0) {
+    if (y > 680) { doc.addPage(); y = margin; }
+    doc.setFont('helvetica', 'bold').setFontSize(14);
+    doc.text('Workload by client', margin, y); y += 14;
+    const tableData = clientRows.map(([name, s]) => [name, String(s.total), String(s.done), s.total > 0 ? Math.round((s.done / s.total) * 100) + '%' : '—']);
+    doc.autoTable({ startY: y, head: [['Client', 'Tasks', 'Completed', 'Rate']], body: tableData, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 10, cellPadding: 7 }, headStyles: { fillColor: [ar, ag, ab], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] } });
+    y = doc.lastAutoTable.finalY + 22;
+  }
+
+  // Full task list
+  if (memberTasks.length > 0) {
+    if (y > 600) { doc.addPage(); y = margin; }
+    doc.setTextColor(58, 45, 45);
+    doc.setFont('helvetica', 'bold').setFontSize(14);
+    doc.text('All tasks in period', margin, y); y += 14;
+    const sorted = [...memberTasks].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const taskRows = sorted.map(t => {
+      const cName = clients.find(c => c.id === t.clientId)?.name || '—';
+      const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
+      return [
+        (t.title || '').slice(0, 50) + ((t.title || '').length > 50 ? '…' : ''),
+        cName,
+        statusLabel,
+        t.priority || '—',
+        t.dueDate ? formatDate(t.dueDate) : '—',
+      ];
+    });
+    doc.autoTable({ startY: y, head: [['Task', 'Client', 'Status', 'Priority', 'Due']], body: taskRows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 6 }, headStyles: { fillColor: [ar, ag, ab], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] }, columnStyles: { 0: { cellWidth: 180 } } });
+  }
+
+  const pages = doc.internal.pages.length - 1;
+  for (let i = 1; i <= pages; i++) { doc.setPage(i); doc.setFont('helvetica', 'normal').setFontSize(8); doc.setTextColor(168, 155, 151); doc.text('Generated ' + new Date().toLocaleDateString() + ' · Studio with Sunny', margin, doc.internal.pageSize.getHeight() - 20); doc.text('Page ' + i + ' of ' + pages, pageW - margin - 50, doc.internal.pageSize.getHeight() - 20); }
+
+  const safeName = (member.name || 'member').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  doc.save(safeName + '_' + periodLabel.toLowerCase().replace(/[^a-z0-9]/gi, '_') + '_' + today() + '.pdf');
+}
+
+function exportMemberReportExcel(member, memberTeam, memberTasks, clients, periodLabel) {
+  const wb = XLSX.utils.book_new();
+  const completed = memberTasks.filter(t => t.status === 'done').length;
+  const inProgress = memberTasks.filter(t => t.status === 'progress').length;
+  const todo = memberTasks.filter(t => t.status === 'todo').length;
+  const review = memberTasks.filter(t => t.status === 'review').length;
+  const blocked = memberTasks.filter(t => t.status === 'blocked').length;
+  const onTime = memberTasks.filter(t => t.status === 'done' && t.dueDate && t.completedAt && t.completedAt <= t.dueDate).length;
+  const completionRate = memberTasks.length > 0 ? Math.round((completed / memberTasks.length) * 100) + '%' : '—';
+  const onTimeRate = completed > 0 ? Math.round((onTime / completed) * 100) + '%' : '—';
+
+  const summary = [
+    ['Individual Performance Report'],
+    [],
+    ['Name', member.name || ''],
+    ['Role', member.role || ''],
+    ['Team', memberTeam?.name || 'Unassigned'],
+    ['Email', member.email || ''],
+    ['WhatsApp', member.whatsapp || ''],
+    ['Period', periodLabel],
+    ['Generated', new Date().toLocaleDateString()],
+    [],
+    ['WORKLOAD'],
+    ['Total tasks', memberTasks.length],
+    ['Completed', completed],
+    ['In progress', inProgress],
+    ['To do', todo],
+    ['In review', review],
+    ['Blocked', blocked],
+    ['Completion rate', completionRate],
+    ['On-time rate', onTimeRate],
+  ];
+  const ws1 = XLSX.utils.aoa_to_sheet(summary);
+  ws1['!cols'] = [{ wch: 24 }, { wch: 22 }];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+
+  // By client
+  const byClient = {};
+  memberTasks.forEach(t => {
+    const cName = clients.find(c => c.id === t.clientId)?.name || 'No client';
+    if (!byClient[cName]) byClient[cName] = { total: 0, done: 0 };
+    byClient[cName].total++;
+    if (t.status === 'done') byClient[cName].done++;
+  });
+  const clientRows = [['Client', 'Tasks', 'Completed', 'Completion Rate']];
+  Object.entries(byClient).sort((a, b) => b[1].total - a[1].total).forEach(([name, s]) => clientRows.push([name, s.total, s.done, s.total > 0 ? Math.round((s.done / s.total) * 100) + '%' : '—']));
+  const ws2 = XLSX.utils.aoa_to_sheet(clientRows);
+  ws2['!cols'] = [{ wch: 28 }, { wch: 10 }, { wch: 12 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, ws2, 'By Client');
+
+  // All tasks
+  const taskRows = [['Title', 'Client', 'Status', 'Priority', 'Due Date', 'Created']];
+  const sorted = [...memberTasks].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  sorted.forEach(t => {
+    const cName = clients.find(c => c.id === t.clientId)?.name || '';
+    const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
+    taskRows.push([t.title || '', cName, statusLabel, t.priority || '', t.dueDate ? formatDate(t.dueDate) : '', t.createdAt ? formatDate(t.createdAt) : '']);
+  });
+  const ws3 = XLSX.utils.aoa_to_sheet(taskRows);
+  ws3['!cols'] = [{ wch: 50 }, { wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Tasks');
+
+  const safeName = (member.name || 'member').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  XLSX.writeFile(wb, safeName + '_' + periodLabel.toLowerCase().replace(/[^a-z0-9]/gi, '_') + '_' + today() + '.xlsx');
+}
+
 const fetchTable = async (table) => { const { data, error } = await sb.from(table).select('*'); if (error) { console.error(`fetch ${table}:`, error); return []; } return data.map(toCamel); };
 const upsertItem = async (table, item, userId) => { const { id, createdAt, ...rest } = item; const cleaned = {}; for (const [k, v] of Object.entries(rest)) { cleaned[k] = (v === '' && (k.endsWith('Id') || k === 'dueDate' || k === 'scheduledDate' || k === 'date')) ? null : v; } const payload = toSnake(cleaned); const op = id ? sb.from(table).update(payload).eq('id', id) : sb.from(table).insert({ ...payload, user_id: userId }); const { error } = await op; if (error) { console.error(`save ${table}:`, error); alert('Save failed: ' + error.message); } };
 const deleteItem = async (table, id) => { const { error } = await sb.from(table).delete().eq('id', id); if (error) console.error(`delete ${table}:`, error); };
@@ -558,7 +735,7 @@ function Dashboard({ user }) {
         <main className="flex-1 min-h-screen" style={{ padding: '32px 40px', maxWidth: 1380 }}>
           {view === 'dashboard' && <DashboardView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} strategies={strategies} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} userEmail={user.email} />}
           {view === 'tasks' && <TasksView tasks={tasks} team={team} teams={teams} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
-          {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} />}
+          {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} clients={clients} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} />}
           {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} posts={posts} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} />}
           {view === 'calendar' && <CalendarView posts={posts} clients={clients} updateStatus={updatePostStatus} onAdd={() => setModal({ type: 'post' })} onEdit={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'reports' && <ReportsView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} igReports={igReports} onAddIgReport={() => setModal({ type: 'igReport' })} onImportIg={() => setModal({ type: 'igImport' })} onEditIgReport={(r) => setModal({ type: 'igReport', data: r })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
@@ -568,7 +745,7 @@ function Dashboard({ user }) {
       </div>
       {modal?.type === 'task' && <TaskModal task={modal.data} team={team} clients={clients} onSave={async (t) => { await saveItem('tasks', t); const member = team.find(m => m.id === t.assigneeId); const client = clients.find(c => c.id === t.clientId); const memberTeam = member ? teams.find(tm => tm.id === member.teamId) : null; const hasPersonal = member && member.whatsapp; const hasGroup = memberTeam && memberTeam.whatsappGroup; if (hasPersonal || hasGroup) { setModal({ type: 'whatsappPrompt', task: t, member, memberTeam, client }); } else { setModal(null); } }} onDelete={modal.data ? async () => { await removeItem('tasks', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'whatsappPrompt' && <WhatsAppPrompt task={modal.task} member={modal.member} memberTeam={modal.memberTeam} client={modal.client} onClose={() => setModal(null)} />}
-      {modal?.type === 'member' && <MemberModal member={modal.data} teams={teams} onSave={async (m) => { await saveItem('team', m); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('team', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'member' && <MemberModal member={modal.data} teams={teams} tasks={tasks} clients={clients} onSave={async (m) => { await saveItem('team', m); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('team', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'teamFolder' && <TeamFolderModal team={modal.data} onSave={async (t) => { await saveItem('teams', t); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('teams', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'client' && <ClientModal client={modal.data} onSave={async (c) => { await saveItem('clients', c); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('clients', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'post' && <PostModal post={modal.data} clients={clients} onSave={async (p) => { await saveItem('posts', p); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('posts', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
@@ -1029,7 +1206,7 @@ function TaskRow({ task, team, clients, compact, onClick, onStatusChange }) {
   );
 }
 
-function TeamView({ team, teams, tasks, onAddMember, onEditMember, onAddTeam, onEditTeam }) {
+function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAddTeam, onEditTeam }) {
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const sortedTeams = [...teams].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   if (selectedTeamId === null) {
@@ -1065,9 +1242,13 @@ function TeamView({ team, teams, tasks, onAddMember, onEditMember, onAddTeam, on
       <PageHeader title={titleText} subtitle={selectedTeam?.description || `${members.length} ${members.length === 1 ? 'member' : 'members'}`} action={<div className="flex gap-2">{isManaged && <button className="btn-ghost" onClick={() => onEditTeam(selectedTeam)}><Edit2 size={12} /> Edit team</button>}<button className="btn-primary" onClick={onAddMember}><Plus size={14} /> Add member</button></div>} />
       {members.length === 0 ? <EmptyState title="No members yet" message="add the first person to this crew!" action={onAddMember} actionLabel="Add member" mood="happy" /> : (
         <div className="grid grid-cols-3 gap-3">
-          {members.map(m => { const memberTasks = tasks.filter(t => t.assigneeId === m.id); const active = memberTasks.filter(t => t.status !== 'done').length; const done = memberTasks.filter(t => t.status === 'done').length; const memberTeam = teams.find(t => t.id === m.teamId); const avatarBg = memberTeam?.color || 'var(--coral)'; return (
-            <button key={m.id} onClick={() => onEditMember(m)} className="card card-hover" style={{ textAlign: 'left' }}>
-              <div className="flex items-center gap-3 mb-4">
+          {members.map(m => { const memberTasks = tasks.filter(t => t.assigneeId === m.id); const active = memberTasks.filter(t => t.status !== 'done').length; const done = memberTasks.filter(t => t.status === 'done').length; const memberTeam = teams.find(t => t.id === m.teamId); const avatarBg = memberTeam?.color || 'var(--coral)'; const periodTasks = memberTasks.filter(t => isInPeriod(t.createdAt, 'month')); const dlPDF = (e) => { e.stopPropagation(); generateMemberReportPDF(m, memberTeam, periodTasks, clients || [], 'Last 30 days'); }; const dlExcel = (e) => { e.stopPropagation(); exportMemberReportExcel(m, memberTeam, periodTasks, clients || [], 'Last 30 days'); }; return (
+            <button key={m.id} onClick={() => onEditMember(m)} className="card card-hover" style={{ textAlign: 'left', position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
+                <span role="button" tabIndex={0} aria-label="Download PDF report" title="Download PDF · last 30 days" onClick={dlPDF} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') dlPDF(e); }} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--coral-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--coral)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--coral-soft)'}><FileText size={12} color="var(--coral-deep)" /></span>
+                <span role="button" tabIndex={0} aria-label="Download Excel report" title="Download Excel · last 30 days" onClick={dlExcel} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') dlExcel(e); }} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--sage-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--sage)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--sage-soft)'}><FileSpreadsheet size={12} color="#5a8068" /></span>
+              </div>
+              <div className="flex items-center gap-3 mb-4" style={{ paddingRight: 64 }}>
                 <div style={{ width: 46, height: 46, borderRadius: '50%', background: avatarBg + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', color: avatarBg, fontSize: 17, fontWeight: 600, flexShrink: 0 }}>{m.name[0]?.toUpperCase()}</div>
                 <div className="min-w-0"><p className="font-semibold truncate" style={{ fontSize: 14 }}>{m.name}</p><p className="text-xs truncate" style={{ color: 'var(--ink-soft)' }}>{m.role || 'Team member'}</p></div>
               </div>
@@ -1568,14 +1749,36 @@ function TaskModal({ task, team, clients, onSave, onDelete, onClose }) {
     <Field label="Client"><select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}><option value="">No client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
   </ModalShell>);
 }
-function MemberModal({ member, teams, onSave, onDelete, onClose }) {
+function MemberModal({ member, teams, tasks, clients, onSave, onDelete, onClose }) {
   const [data, setData] = useState(member || { name: '', role: '', email: '', whatsapp: '', teamId: '' });
+  const [reportPeriod, setReportPeriod] = useState('month');
   const update = (k, v) => setData({ ...data, [k]: v });
+
+  const PERIOD_LABELS = { week: 'Last 7 days', month: 'Last 30 days', quarter: 'Last 90 days', all: 'All time' };
+  const memberTasks = (tasks || []).filter(t => t.assigneeId === member?.id && isInPeriod(t.createdAt, reportPeriod));
+  const memberTeam = teams.find(t => t.id === data.teamId) || teams.find(t => t.id === member?.teamId);
+  const handlePDF = () => generateMemberReportPDF(member, memberTeam, memberTasks, clients || [], PERIOD_LABELS[reportPeriod]);
+  const handleExcel = () => exportMemberReportExcel(member, memberTeam, memberTasks, clients || [], PERIOD_LABELS[reportPeriod]);
+
   return (<ModalShell title={member ? 'Edit member' : 'Add member'} onClose={onClose} onDelete={onDelete} onSave={() => data.name.trim() && onSave(data)}>
     <Field label="Name"><input className="input-field" value={data.name} onChange={e => update('name', e.target.value)} placeholder="Full name" /></Field>
     <div className="grid grid-cols-2 gap-3"><Field label="Role"><input className="input-field" value={data.role || ''} onChange={e => update('role', e.target.value)} placeholder="e.g. Designer" /></Field><Field label="Team"><select className="input-field" value={data.teamId || ''} onChange={e => update('teamId', e.target.value)}><option value="">No team</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field></div>
     <Field label="Email"><input className="input-field" type="email" value={data.email || ''} onChange={e => update('email', e.target.value)} placeholder="email@domain.com" /></Field>
     <Field label={<span className="flex items-center gap-1.5">WhatsApp number <span className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', fontWeight: 400 }}>(with country code)</span></span>}><input className="input-field" type="tel" value={data.whatsapp || ''} onChange={e => update('whatsapp', e.target.value)} placeholder="+919876543210" /></Field>
+    {member && (
+      <div style={{ borderTop: '1px solid var(--line)', marginTop: 6, paddingTop: 14 }}>
+        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4 }}>PERFORMANCE REPORT</p>
+        <p className="hand mb-3" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem' }}>download a personal report ✨</p>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--bg-warmer)', border: '1px solid var(--line)', padding: 4, borderRadius: 999, marginBottom: 10 }}>
+          {[{ id: 'week', label: 'Last 7d' }, { id: 'month', label: 'Last 30d' }, { id: 'quarter', label: 'Last 90d' }, { id: 'all', label: 'All time' }].map(p => {
+            const active = reportPeriod === p.id;
+            return <button key={p.id} type="button" onClick={() => setReportPeriod(p.id)} style={{ flex: 1, background: active ? 'var(--coral)' : 'transparent', color: active ? 'white' : 'var(--ink-soft)', padding: '6px 10px', border: 'none', borderRadius: 999, fontWeight: 500, fontSize: 12, boxShadow: active ? '0 1px 0 var(--coral-deep)' : 'none', cursor: 'pointer' }}>{p.label}</button>;
+          })}
+        </div>
+        <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>{memberTasks.length} task{memberTasks.length === 1 ? '' : 's'} in this period · {memberTasks.filter(t => t.status === 'done').length} completed</p>
+        <div className="flex gap-2"><button type="button" className="btn-ghost" onClick={handlePDF}><FileText size={12} /> Export PDF</button><button type="button" className="btn-ghost" onClick={handleExcel}><FileSpreadsheet size={12} /> Export Excel</button></div>
+      </div>
+    )}
   </ModalShell>);
 }
 function TeamFolderModal({ team, onSave, onDelete, onClose }) {
