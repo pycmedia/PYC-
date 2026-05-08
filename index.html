@@ -430,6 +430,7 @@ function exportTeamReportExcel(memberStats, teamStats, periodLabel, periodTasks)
 const fetchTable = async (table) => { const { data, error } = await sb.from(table).select('*'); if (error) { console.error(`fetch ${table}:`, error); return []; } return data.map(toCamel); };
 const upsertItem = async (table, item, userId) => { const { id, createdAt, ...rest } = item; const cleaned = {}; for (const [k, v] of Object.entries(rest)) { cleaned[k] = (v === '' && (k.endsWith('Id') || k === 'dueDate' || k === 'scheduledDate' || k === 'date')) ? null : v; } const payload = toSnake(cleaned); const op = id ? sb.from(table).update(payload).eq('id', id) : sb.from(table).insert({ ...payload, user_id: userId }); const { error } = await op; if (error) { console.error(`save ${table}:`, error); alert('Save failed: ' + error.message); } };
 const deleteItem = async (table, id) => { const { error } = await sb.from(table).delete().eq('id', id); if (error) console.error(`delete ${table}:`, error); };
+const normalizeUrl = (url) => { if (!url) return ''; const trimmed = String(url).trim(); if (!trimmed) return ''; if (/^https?:\/\//i.test(trimmed)) return trimmed; return 'https://' + trimmed; };
 
 function App() {
   const [user, setUser] = useState(null);
@@ -1108,6 +1109,17 @@ function ClientsView({ clients, comms, tasks, onAdd, onEdit, onLog }) {
             <div className="card">
               <div className="flex items-start justify-between mb-5"><div><h2 className="display text-2xl">{sel.name}</h2>{sel.contactName && <p className="text-sm mt-1" style={{ color: 'var(--ink-soft)' }}>{sel.contactName}</p>}</div><div className="flex gap-2"><button className="btn-ghost" onClick={() => onLog(sel)}><MessageSquare size={12} /> Log</button><button className="btn-ghost" onClick={() => onEdit(sel)}><Edit2 size={12} /> Edit</button></div></div>
               <div className="grid grid-cols-2 gap-3 mb-5 p-4" style={{ background: 'var(--bg-warmer)', borderRadius: 14 }}>{sel.contactInfo && <div><p className="text-xs mb-1" style={{ color: 'var(--ink-soft)' }}>Contact</p><p className="text-sm font-medium">{sel.contactInfo}</p></div>}{sel.platforms && <div><p className="text-xs mb-1" style={{ color: 'var(--ink-soft)' }}>Platforms</p><p className="text-sm font-medium">{sel.platforms}</p></div>}</div>
+              {(sel.instagram || sel.facebook || sel.linkedin || sel.website) && (
+                <div className="mb-5">
+                  <p className="text-xs font-semibold mb-2" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3 }}>SOCIAL LINKS</p>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {sel.instagram && <a href={sel.instagram} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, background: 'var(--coral-soft)', color: 'var(--coral-deep)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}><Instagram size={12} color="var(--coral-deep)" /> Instagram <ExternalLink size={10} color="var(--coral-deep)" style={{ opacity: 0.6 }} /></a>}
+                    {sel.facebook && <a href={sel.facebook} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, background: 'var(--sky-soft)', color: '#4a7591', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}><Facebook size={12} color="#4a7591" /> Facebook <ExternalLink size={10} color="#4a7591" style={{ opacity: 0.6 }} /></a>}
+                    {sel.linkedin && <a href={sel.linkedin} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, background: 'var(--lavender-soft)', color: '#7d63a3', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}><Linkedin size={12} color="#7d63a3" /> LinkedIn <ExternalLink size={10} color="#7d63a3" style={{ opacity: 0.6 }} /></a>}
+                    {sel.website && <a href={sel.website} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, background: 'var(--line-soft)', color: 'var(--ink-soft)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}><ExternalLink size={12} color="var(--ink-soft)" /> Website</a>}
+                  </div>
+                </div>
+              )}
               {sel.notes && <div className="mb-5 p-4" style={{ background: 'var(--bg-warmer)', borderRadius: 14 }}><p className="text-xs mb-1.5" style={{ color: 'var(--ink-soft)' }}>Notes</p><p className="text-sm leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>{sel.notes}</p></div>}
               <div className="mb-5"><h3 className="display text-lg mb-3">Conversation log</h3>{selComms.length === 0 ? <p className="text-sm py-2" style={{ color: 'var(--ink-soft)' }}>No conversations logged yet.</p> : <div className="space-y-2.5">{selComms.map(c => <div key={c.id} className="p-3" style={{ background: 'var(--bg-warmer)', borderRadius: 12 }}><div className="flex items-center gap-2 mb-1"><span className="badge" style={{ background: 'var(--ink)', color: 'white' }}>{c.type}</span><span className="text-xs" style={{ color: 'var(--ink-soft)' }}>{formatDateTime(c.date)}</span></div><p className="text-sm leading-relaxed">{c.summary}</p></div>)}</div>}</div>
               <div><h3 className="display text-lg mb-3">Active tasks</h3>{selTasks.filter(t => t.status !== 'done').length === 0 ? <p className="text-sm py-1" style={{ color: 'var(--ink-soft)' }}>No active tasks.</p> : <div className="space-y-2">{selTasks.filter(t => t.status !== 'done').map(t => <div key={t.id} className="p-3 flex items-center justify-between" style={{ background: 'var(--bg-warmer)', borderRadius: 10 }}><p className="text-sm font-medium">{t.title}</p><span className="badge" style={{ background: STATUS_COLORS[t.status]?.bg, color: STATUS_COLORS[t.status]?.text }}>{STATUS_COLORS[t.status]?.label}</span></div>)}</div>}</div>
@@ -1377,13 +1389,23 @@ function TeamFolderModal({ team, onSave, onDelete, onClose }) {
   </ModalShell>);
 }
 function ClientModal({ client, onSave, onDelete, onClose }) {
-  const [data, setData] = useState(client || { name: '', contactName: '', contactInfo: '', status: 'active', platforms: '', notes: '' });
+  const [data, setData] = useState(client || { name: '', contactName: '', contactInfo: '', status: 'active', platforms: '', notes: '', instagram: '', facebook: '', linkedin: '', website: '' });
   const update = (k, v) => setData({ ...data, [k]: v });
-  return (<ModalShell title={client ? 'Edit client' : 'Add client'} onClose={onClose} onDelete={onDelete} onSave={() => data.name.trim() && onSave(data)}>
+  const save = () => {
+    if (!data.name.trim()) return;
+    onSave({ ...data, instagram: normalizeUrl(data.instagram), facebook: normalizeUrl(data.facebook), linkedin: normalizeUrl(data.linkedin), website: normalizeUrl(data.website) });
+  };
+  return (<ModalShell title={client ? 'Edit client' : 'Add client'} onClose={onClose} onDelete={onDelete} onSave={save}>
     <Field label="Brand name"><input className="input-field" value={data.name} onChange={e => update('name', e.target.value)} placeholder="The brand" /></Field>
     <div className="grid grid-cols-2 gap-3"><Field label="Contact person"><input className="input-field" value={data.contactName || ''} onChange={e => update('contactName', e.target.value)} placeholder="Name" /></Field><Field label="Status"><select className="input-field" value={data.status} onChange={e => update('status', e.target.value)}><option value="active">Active</option><option value="paused">Paused</option><option value="onboarding">Onboarding</option><option value="archived">Archived</option></select></Field></div>
     <Field label="Email / Phone"><input className="input-field" value={data.contactInfo || ''} onChange={e => update('contactInfo', e.target.value)} placeholder="Email or number" /></Field>
     <Field label="Platforms"><input className="input-field" value={data.platforms || ''} onChange={e => update('platforms', e.target.value)} placeholder="Instagram, Facebook, LinkedIn..." /></Field>
+    <div style={{ borderTop: '1px solid var(--line)', margin: '4px 0 2px', paddingTop: 12 }}>
+      <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4 }}>SOCIAL LINKS</p>
+      <p className="hand mb-3" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem' }}>paste profile URLs — we'll add https:// if missing ✨</p>
+    </div>
+    <div className="grid grid-cols-2 gap-3"><Field label="Instagram"><input className="input-field" value={data.instagram || ''} onChange={e => update('instagram', e.target.value)} placeholder="instagram.com/handle" /></Field><Field label="Facebook"><input className="input-field" value={data.facebook || ''} onChange={e => update('facebook', e.target.value)} placeholder="facebook.com/page" /></Field></div>
+    <div className="grid grid-cols-2 gap-3"><Field label="LinkedIn"><input className="input-field" value={data.linkedin || ''} onChange={e => update('linkedin', e.target.value)} placeholder="linkedin.com/company/..." /></Field><Field label="Website"><input className="input-field" value={data.website || ''} onChange={e => update('website', e.target.value)} placeholder="example.com" /></Field></div>
     <Field label="Notes"><textarea className="input-field" rows={4} value={data.notes || ''} onChange={e => update('notes', e.target.value)} placeholder="Brand voice, do's and don'ts..." /></Field>
   </ModalShell>);
 }
