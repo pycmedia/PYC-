@@ -199,18 +199,21 @@ const isInPeriod = (dateStr, period) => { if (period === 'all') return true; if 
 
 function buildWhatsAppMessage(task, member, client) {
   const lines = [];
-  lines.push(`Hi ${member.name}! 👋`);
+  lines.push(`Hi ${member.name},`);
   lines.push('');
-  lines.push(`You've been assigned a new task:`);
+  lines.push(`A new task has been assigned to you.`);
   lines.push('');
-  lines.push(`📌 *${task.title}*`);
-  if (task.description) lines.push(`\n${task.description}`);
+  lines.push(`Task: *${task.title}*`);
+  if (task.description) lines.push(`\nDetails: ${task.description}`);
   lines.push('');
-  if (client) lines.push(`🏢 Client: ${client.name}`);
-  if (task.priority) lines.push(`⚡ Priority: ${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`);
-  if (task.dueDate) lines.push(`📅 Due: ${formatDate(task.dueDate)}`);
+  if (client) lines.push(`Client: *${client.name}*`);
+  if (task.priority) lines.push(`Priority: *${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}*`);
+  if (task.dueDate) lines.push(`Due date: *${formatDate(task.dueDate)}*`);
   lines.push('');
-  lines.push(`Sent from Studio with Sunny ☀️`);
+  lines.push(`Please reach out if you have any questions or need clarification.`);
+  lines.push('');
+  lines.push(`Thanks,`);
+  lines.push(`Studio`);
   return lines.join('\n');
 }
 function openWhatsApp(phoneRaw, message) {
@@ -562,8 +565,8 @@ function Dashboard({ user }) {
           {view === 'strategy' && <StrategyView strategies={strategies} clients={clients} onAdd={() => setModal({ type: 'strategy' })} onEdit={(s) => setModal({ type: 'strategy', data: s })} />}
         </main>
       </div>
-      {modal?.type === 'task' && <TaskModal task={modal.data} team={team} clients={clients} onSave={async (t) => { await saveItem('tasks', t); const member = team.find(m => m.id === t.assigneeId); const client = clients.find(c => c.id === t.clientId); if (member && member.whatsapp) { setModal({ type: 'whatsappPrompt', task: t, member, client }); } else { setModal(null); } }} onDelete={modal.data ? async () => { await removeItem('tasks', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
-      {modal?.type === 'whatsappPrompt' && <WhatsAppPrompt task={modal.task} member={modal.member} client={modal.client} onClose={() => setModal(null)} />}
+      {modal?.type === 'task' && <TaskModal task={modal.data} team={team} clients={clients} onSave={async (t) => { await saveItem('tasks', t); const member = team.find(m => m.id === t.assigneeId); const client = clients.find(c => c.id === t.clientId); const memberTeam = member ? teams.find(tm => tm.id === member.teamId) : null; const hasPersonal = member && member.whatsapp; const hasGroup = memberTeam && memberTeam.whatsappGroup; if (hasPersonal || hasGroup) { setModal({ type: 'whatsappPrompt', task: t, member, memberTeam, client }); } else { setModal(null); } }} onDelete={modal.data ? async () => { await removeItem('tasks', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'whatsappPrompt' && <WhatsAppPrompt task={modal.task} member={modal.member} memberTeam={modal.memberTeam} client={modal.client} onClose={() => setModal(null)} />}
       {modal?.type === 'member' && <MemberModal member={modal.data} teams={teams} onSave={async (m) => { await saveItem('team', m); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('team', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'teamFolder' && <TeamFolderModal team={modal.data} onSave={async (t) => { await saveItem('teams', t); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('teams', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'client' && <ClientModal client={modal.data} onSave={async (c) => { await saveItem('clients', c); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('clients', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
@@ -756,28 +759,64 @@ function FollowUpCard({ tasks, team, teams, clients, setView }) {
   followUps.sort((a, b) => a.urgency - b.urgency);
   const onTrackCount = team.filter(m => !followUps.some(f => f.member.id === m.id)).length;
 
-  const sendNudge = (e, item) => {
+  const buildNudgeMessage = (item) => {
+    const lines = [];
+    lines.push(`Hi ${item.member.name},`);
+    lines.push('');
+    if (item.urgency === 1) {
+      lines.push(`Just following up on this task:`);
+      lines.push('');
+      lines.push(`Task: *${item.task.title}*`);
+      if (item.client) lines.push(`Client: ${item.client.name}`);
+      lines.push('');
+      lines.push(`The due date was *${formatDate(item.task.dueDate)}*. Could you share an update on where things stand? Let me know if you need any support to wrap this up.`);
+    } else if (item.urgency === 2) {
+      lines.push(`A quick check-in on today's task:`);
+      lines.push('');
+      lines.push(`Task: *${item.task.title}*`);
+      if (item.client) lines.push(`Client: ${item.client.name}`);
+      lines.push('');
+      lines.push(`This is due *today*. Please let me know if anything is blocking you, or if you need help to get it done on time.`);
+    } else {
+      lines.push(`Following up on a task that's been waiting for review:`);
+      lines.push('');
+      lines.push(`Task: *${item.task.title}*`);
+      if (item.client) lines.push(`Client: ${item.client.name}`);
+      lines.push('');
+      lines.push(`This has been in Review for a few days. Could you take a look and share your feedback when you get a chance?`);
+    }
+    lines.push('');
+    lines.push(`Thanks,`);
+    lines.push(`Studio`);
+    return lines.join('\n');
+  };
+
+  const sendPersonalNudge = (e, item) => {
     e.stopPropagation();
     const phone = String(item.member.whatsapp || '').replace(/[^\d]/g, '');
     if (!phone) {
       alert(`No WhatsApp number for ${item.member.name}. Add one in the Team page.`);
       return;
     }
-    const lines = [];
-    lines.push(`Hi ${item.member.name}! 👋`);
-    lines.push('');
-    lines.push(`Just checking in on this task:`);
-    lines.push('');
-    lines.push(`📌 *${item.task.title}*`);
-    if (item.client) lines.push(`🏢 ${item.client.name}`);
-    lines.push('');
-    if (item.urgency === 1) lines.push(`This was due ${formatDate(item.task.dueDate)} — need any help to get it across the line? ☀️`);
-    else if (item.urgency === 2) lines.push(`It's due today. Anything blocking you? Let me know if you need a hand! ☀️`);
-    else lines.push(`It's been waiting in Review for a few days. Could you take a look when you get a moment? ☀️`);
-    lines.push('');
-    lines.push(`From Studio with Sunny`);
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`;
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(buildNudgeMessage(item))}`;
     window.open(url, '_blank');
+  };
+
+  const sendGroupNudge = async (e, item) => {
+    e.stopPropagation();
+    const groupName = item.memberTeam?.whatsappGroup;
+    if (!groupName) {
+      alert(`No WhatsApp group set for ${item.memberTeam?.name || 'this team'}. Add one in the Team page (edit team folder).`);
+      return;
+    }
+    const message = buildNudgeMessage(item);
+    try {
+      await navigator.clipboard.writeText(message);
+    } catch (err) {
+      const ta = document.createElement('textarea'); ta.value = message; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    alert(`Message copied! Now opening WhatsApp Web — paste into your "${groupName}" group chat.`);
+    window.open('https://web.whatsapp.com', '_blank');
   };
 
   return (
@@ -815,10 +854,23 @@ function FollowUpCard({ tasks, team, teams, clients, setView }) {
                   <p className="text-xs truncate" style={{ color: 'var(--ink-soft)' }}>{item.task.title}{item.client ? ` · ${item.client.name}` : ''}</p>
                   <p className="text-xs mt-1" style={{ color: item.reasonColor, fontWeight: 600 }}>{item.reason}</p>
                 </div>
-                <button onClick={(e) => sendNudge(e, item)} style={{ background: '#25D366', color: 'white', padding: '7px 14px', border: 'none', borderRadius: 999, fontSize: 11.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0, boxShadow: '0 1.5px 0 #128C7E', cursor: 'pointer' }} title={item.member.whatsapp ? `Send to ${item.member.whatsapp}` : 'Add a WhatsApp number first'}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><path d="M17.498 14.382c-.301-.15-1.767-.867-2.04-.966-.273-.101-.473-.15-.673.15-.197.295-.771.964-.944 1.162-.175.195-.349.21-.646.075-.3-.15-1.263-.465-2.403-1.485-.888-.795-1.484-1.77-1.66-2.07-.174-.3-.019-.465.13-.615.136-.135.301-.345.451-.523.146-.181.194-.301.297-.496.1-.21.049-.375-.025-.524-.075-.15-.672-1.62-.922-2.206-.24-.584-.487-.51-.672-.51-.172-.015-.371-.015-.571-.015-.2 0-.523.074-.797.359-.273.3-1.045 1.02-1.045 2.475s1.07 2.865 1.219 3.075c.149.195 2.105 3.195 5.1 4.485.714.3 1.27.48 1.704.629.714.227 1.365.195 1.88.121.574-.091 1.767-.721 2.016-1.426.255-.705.255-1.29.18-1.425-.074-.135-.27-.21-.57-.345"/></svg>
-                  Nudge
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                  {item.member.whatsapp && (
+                    <button onClick={(e) => sendPersonalNudge(e, item)} style={{ background: '#25D366', color: 'white', padding: '6px 12px', border: 'none', borderRadius: 999, fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5, boxShadow: '0 1.5px 0 #128C7E', cursor: 'pointer' }} title={`Personal DM to ${item.member.whatsapp}`}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="white"><path d="M17.498 14.382c-.301-.15-1.767-.867-2.04-.966-.273-.101-.473-.15-.673.15-.197.295-.771.964-.944 1.162-.175.195-.349.21-.646.075-.3-.15-1.263-.465-2.403-1.485-.888-.795-1.484-1.77-1.66-2.07"/></svg>
+                      DM
+                    </button>
+                  )}
+                  {item.memberTeam?.whatsappGroup && (
+                    <button onClick={(e) => sendGroupNudge(e, item)} style={{ background: 'white', color: item.memberTeam.color || 'var(--ink)', padding: '6px 12px', border: `1.5px solid ${item.memberTeam.color || 'var(--line)'}`, borderRadius: 999, fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }} title={`Copy for "${item.memberTeam.whatsappGroup}" group`}>
+                      <Users size={10} />
+                      Group
+                    </button>
+                  )}
+                  {!item.member.whatsapp && !item.memberTeam?.whatsappGroup && (
+                    <span style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '4px 8px', border: '1px dashed var(--line)', borderRadius: 999 }}>No WA set</span>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -1315,11 +1367,12 @@ function MemberModal({ member, teams, onSave, onDelete, onClose }) {
   </ModalShell>);
 }
 function TeamFolderModal({ team, onSave, onDelete, onClose }) {
-  const [data, setData] = useState(team || { name: '', description: '', color: TEAM_COLORS[0], sortOrder: 99 });
+  const [data, setData] = useState(team || { name: '', description: '', color: TEAM_COLORS[0], sortOrder: 99, whatsappGroup: '' });
   const update = (k, v) => setData({ ...data, [k]: v });
   return (<ModalShell title={team ? 'Edit team' : 'New team'} onClose={onClose} onDelete={onDelete} onSave={() => data.name.trim() && onSave(data)}>
     <Field label="Team name"><input className="input-field" value={data.name} onChange={e => update('name', e.target.value)} placeholder="e.g. Design" /></Field>
     <Field label="Description"><input className="input-field" value={data.description || ''} onChange={e => update('description', e.target.value)} placeholder="What does this team do?" /></Field>
+    <Field label={<span className="flex items-center gap-1.5">WhatsApp group name <span className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', fontWeight: 400 }}>(optional)</span></span>}><input className="input-field" value={data.whatsappGroup || ''} onChange={e => update('whatsappGroup', e.target.value)} placeholder="e.g. PYC Design Team" /></Field>
     <Field label="Color"><div className="flex gap-2 flex-wrap">{TEAM_COLORS.map(c => <button key={c} onClick={() => update('color', c)} style={{ width: 32, height: 32, borderRadius: '50%', background: c, border: data.color === c ? '3px solid var(--ink)' : '3px solid transparent', cursor: 'pointer' }}></button>)}</div></Field>
   </ModalShell>);
 }
@@ -1436,29 +1489,82 @@ function PreviewField({ label, value, found, onChange }) {
   return <Field label={<span className="flex items-center gap-1.5">{label}{found && <span className="badge" style={{ background: 'var(--sage-soft)', color: 'var(--sage)', fontSize: 9 }}>found</span>}</span>}><input type="number" min="0" className="input-field" value={value} onChange={e => onChange(e.target.value)} style={{ borderColor: found ? 'var(--sage)' : 'var(--line)' }} /></Field>;
 }
 
-function WhatsAppPrompt({ task, member, client, onClose }) {
+function WhatsAppPrompt({ task, member, memberTeam, client, onClose }) {
+  const [copied, setCopied] = useState(false);
   const message = buildWhatsAppMessage(task, member, client);
-  const handleSend = () => { openWhatsApp(member.whatsapp, message); onClose(); };
+  const hasPersonal = member && member.whatsapp;
+  const hasGroup = memberTeam && memberTeam.whatsappGroup;
+
+  const handleSendPersonal = () => { openWhatsApp(member.whatsapp, message); onClose(); };
+  const handleCopyForGroup = async () => {
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+      setTimeout(() => { window.open('https://web.whatsapp.com', '_blank'); onClose(); }, 800);
+    } catch (err) {
+      const ta = document.createElement('textarea');
+      ta.value = message;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => { window.open('https://web.whatsapp.com', '_blank'); onClose(); }, 800);
+    }
+  };
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(58, 45, 45, 0.4)' }} onClick={onClose}>
-      <div className="scale-in" style={{ background: 'var(--card)', borderRadius: 18, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(58, 45, 45, 0.2)' }} onClick={e => e.stopPropagation()}>
+      <div className="scale-in" style={{ background: 'var(--card)', borderRadius: 18, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(58, 45, 45, 0.2)' }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '24px 24px 0', textAlign: 'center' }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#25D366', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="white"><path d="M17.498 14.382c-.301-.15-1.767-.867-2.04-.966-.273-.101-.473-.15-.673.15-.197.295-.771.964-.944 1.162-.175.195-.349.21-.646.075-.3-.15-1.263-.465-2.403-1.485-.888-.795-1.484-1.77-1.66-2.07-.174-.3-.019-.465.13-.615.136-.135.301-.345.451-.523.146-.181.194-.301.297-.496.1-.21.049-.375-.025-.524-.075-.15-.672-1.62-.922-2.206-.24-.584-.487-.51-.672-.51-.172-.015-.371-.015-.571-.015-.2 0-.523.074-.797.359-.273.3-1.045 1.02-1.045 2.475s1.07 2.865 1.219 3.075c.149.195 2.105 3.195 5.1 4.485.714.3 1.27.48 1.704.629.714.227 1.365.195 1.88.121.574-.091 1.767-.721 2.016-1.426.255-.705.255-1.29.18-1.425-.074-.135-.27-.21-.57-.345m-5.446 7.443h-.016c-1.77 0-3.524-.48-5.055-1.38l-.36-.214-3.75.975 1.005-3.645-.239-.375a9.869 9.869 0 0 1-1.516-5.26c.002-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413"/></svg>
+          <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#25D366', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M17.498 14.382c-.301-.15-1.767-.867-2.04-.966-.273-.101-.473-.15-.673.15-.197.295-.771.964-.944 1.162-.175.195-.349.21-.646.075-.3-.15-1.263-.465-2.403-1.485-.888-.795-1.484-1.77-1.66-2.07-.174-.3-.019-.465.13-.615.136-.135.301-.345.451-.523.146-.181.194-.301.297-.496.1-.21.049-.375-.025-.524-.075-.15-.672-1.62-.922-2.206-.24-.584-.487-.51-.672-.51-.172-.015-.371-.015-.571-.015-.2 0-.523.074-.797.359-.273.3-1.045 1.02-1.045 2.475s1.07 2.865 1.219 3.075c.149.195 2.105 3.195 5.1 4.485.714.3 1.27.48 1.704.629.714.227 1.365.195 1.88.121.574-.091 1.767-.721 2.016-1.426.255-.705.255-1.29.18-1.425-.074-.135-.27-.21-.57-.345m-5.446 7.443h-.016c-1.77 0-3.524-.48-5.055-1.38l-.36-.214-3.75.975 1.005-3.645-.239-.375a9.869 9.869 0 0 1-1.516-5.26c.002-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413"/></svg>
           </div>
-          <h2 className="display text-2xl mb-1">Notify {member.name}?</h2>
-          <p className="hand mb-4" style={{ color: 'var(--coral-deep)', fontSize: '1.15rem' }}>send the task details on WhatsApp ✨</p>
+          <h2 className="display text-2xl mb-1">Send task notification</h2>
+          <p className="hand mb-3" style={{ color: 'var(--coral-deep)', fontSize: '1.1rem' }}>pick where to send it ✨</p>
         </div>
+
         <div style={{ padding: '0 24px' }}>
-          <div style={{ background: 'var(--bg-warmer)', borderRadius: 14, padding: 14, border: '1px solid var(--line)', maxHeight: 220, overflowY: 'auto' }}>
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 6, fontWeight: 600 }}>MESSAGE PREVIEW</p>
-            <p style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: 'var(--ink)' }}>{message}</p>
+          <div style={{ background: 'var(--bg-warmer)', borderRadius: 14, padding: 14, border: '1px solid var(--line)', maxHeight: 180, overflowY: 'auto' }}>
+            <p style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 6, fontWeight: 600, letterSpacing: 0.5 }}>MESSAGE PREVIEW</p>
+            <p style={{ fontSize: 12.5, lineHeight: 1.55, whiteSpace: 'pre-wrap', color: 'var(--ink)' }}>{message}</p>
           </div>
-          <p style={{ fontSize: 11.5, color: 'var(--muted)', textAlign: 'center', marginTop: 10 }}>Sending to {member.whatsapp}</p>
         </div>
-        <div className="flex gap-2" style={{ padding: '20px 24px 24px' }}>
-          <button className="btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center' }}>Skip</button>
-          <button onClick={handleSend} style={{ flex: 1, background: '#25D366', color: 'white', padding: '10px 18px', border: 'none', borderRadius: 999, fontWeight: 600, fontSize: 13.5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, boxShadow: '0 1.5px 0 #128C7E', cursor: 'pointer' }}>Open WhatsApp <ArrowRight size={14} /></button>
+
+        <div style={{ padding: '16px 24px 8px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {hasPersonal && (
+            <button onClick={handleSendPersonal} style={{ width: '100%', background: 'white', color: 'var(--ink)', padding: '12px 16px', border: '1.5px solid var(--line)', borderRadius: 14, fontWeight: 500, fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.15s', textAlign: 'left', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#25D366'; e.currentTarget.style.background = '#f0fdf4'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'white'; }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#25D36622', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontWeight: 600, fontSize: 14, marginBottom: 1 }}>Send to {member.name}</p>
+                <p style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>Personal DM · {member.whatsapp}</p>
+              </div>
+              <ArrowRight size={14} color="var(--ink-soft)" />
+            </button>
+          )}
+
+          {hasGroup && (
+            <button onClick={handleCopyForGroup} style={{ width: '100%', background: 'white', color: 'var(--ink)', padding: '12px 16px', border: '1.5px solid var(--line)', borderRadius: 14, fontWeight: 500, fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.15s', textAlign: 'left', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.borderColor = memberTeam.color || '#25D366'; e.currentTarget.style.background = (memberTeam.color || '#25D366') + '11'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'white'; }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: (memberTeam.color || '#25D366') + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Users size={16} color={memberTeam.color || '#25D366'} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontWeight: 600, fontSize: 14, marginBottom: 1 }}>{copied ? 'Copied! Opening WhatsApp...' : `Copy for "${memberTeam.whatsappGroup}"`}</p>
+                <p style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>{copied ? 'Now paste in your group chat' : 'Copies message → opens WhatsApp Web'}</p>
+              </div>
+              {copied ? <CheckCircle2 size={16} color="var(--sage)" /> : <ArrowRight size={14} color="var(--ink-soft)" />}
+            </button>
+          )}
+
+          {!hasGroup && hasPersonal && memberTeam && (
+            <p style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', padding: '4px 0' }}>Tip: add a WhatsApp group name to "{memberTeam.name}" team to send to the group too</p>
+          )}
+        </div>
+
+        <div style={{ padding: '8px 24px 20px' }}>
+          <button className="btn-ghost" onClick={onClose} style={{ width: '100%', justifyContent: 'center' }}>Skip</button>
         </div>
       </div>
     </div>
