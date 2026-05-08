@@ -530,7 +530,7 @@ function Dashboard({ user }) {
         </aside>
         <main className="flex-1 min-h-screen" style={{ padding: '32px 40px', maxWidth: 1380 }}>
           {view === 'dashboard' && <DashboardView tasks={tasks} team={team} clients={clients} posts={posts} comms={comms} strategies={strategies} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} userEmail={user.email} />}
-          {view === 'tasks' && <TasksView tasks={tasks} team={team} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
+          {view === 'tasks' && <TasksView tasks={tasks} team={team} teams={teams} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
           {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} />}
           {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} />}
           {view === 'calendar' && <CalendarView posts={posts} clients={clients} updateStatus={updatePostStatus} onAdd={() => setModal({ type: 'post' })} onEdit={(p) => setModal({ type: 'post', data: p })} />}
@@ -712,20 +712,95 @@ function EmptyState({ title, message, action, actionLabel, mood = 'happy' }) {
   );
 }
 
-function TasksView({ tasks, team, clients, toggleStatus, onAdd, onEdit }) {
-  const [filter, setFilter] = useState('all');
+function TasksView({ tasks, team, teams, clients, toggleStatus, onAdd, onEdit }) {
+  const [teamFilter, setTeamFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const filtered = tasks.filter(t => filter === 'all' || t.status === filter).filter(t => !search || t.title.toLowerCase().includes(search.toLowerCase())).sort((a, b) => { const o = { high: 0, medium: 1, low: 2 }; return (o[a.priority] || 1) - (o[b.priority] || 1); });
+  const sortedTeams = [...(teams || [])].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const memberById = (id) => team.find(m => m.id === id);
+  const taskTeamId = (t) => { const m = memberById(t.assigneeId); return m?.teamId || 'unassigned'; };
+  const teamTaskCount = (tId) => tasks.filter(t => taskTeamId(t) === tId).length;
+  const filtered = tasks
+    .filter(t => teamFilter === 'all' ? true : teamFilter === 'unassigned' ? taskTeamId(t) === 'unassigned' : taskTeamId(t) === teamFilter)
+    .filter(t => statusFilter === 'all' || t.status === statusFilter)
+    .filter(t => !search || t.title.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => { const o = { high: 0, medium: 1, low: 2 }; return (o[a.priority] || 1) - (o[b.priority] || 1); });
   const buckets = ['todo', 'progress', 'review', 'done', 'blocked'];
+  const groupedByTeam = teamFilter === 'all' ? sortedTeams.map(t => ({ teamObj: t, members: team.filter(m => m.teamId === t.id), tasks: filtered.filter(task => taskTeamId(task) === t.id) })).filter(g => g.tasks.length > 0) : [];
+  const unassignedGroup = teamFilter === 'all' ? filtered.filter(t => taskTeamId(t) === 'unassigned') : [];
+  const selectedTeamObj = teamFilter !== 'all' && teamFilter !== 'unassigned' ? sortedTeams.find(t => t.id === teamFilter) : null;
+  const selectedTeamMembers = selectedTeamObj ? team.filter(m => m.teamId === selectedTeamObj.id) : [];
   return (
     <div className="fade-in">
-      <PageHeader title="Tasks" subtitle="everything on your plate ✨" action={<button className="btn-primary" onClick={onAdd}><Plus size={14} /> New task</button>} />
+      <PageHeader title="Tasks" subtitle="organized by team ✨" action={<button className="btn-primary" onClick={onAdd}><Plus size={14} /> New task</button>} />
+
+      <div className="flex items-center gap-2 mb-3 flex-wrap" style={{ paddingBottom: 14, borderBottom: '1px solid var(--line)' }}>
+        <Pill label={`All teams (${tasks.length})`} active={teamFilter === 'all'} onClick={() => setTeamFilter('all')} />
+        {sortedTeams.map(t => { const count = teamTaskCount(t.id); return <button key={t.id} onClick={() => setTeamFilter(t.id)} style={{ padding: '7px 14px', borderRadius: 999, fontSize: 12.5, fontWeight: 500, background: teamFilter === t.id ? (t.color || 'var(--coral)') : 'var(--card)', color: teamFilter === t.id ? 'white' : 'var(--ink-soft)', border: '1px solid ' + (teamFilter === t.id ? (t.color || 'var(--coral)') : 'var(--line)'), transition: 'all 0.15s', boxShadow: teamFilter === t.id ? `0 1.5px 0 ${t.color || 'var(--coral-deep)'}99` : 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: teamFilter === t.id ? 'white' : (t.color || 'var(--coral)'), display: 'inline-block' }}></span>{t.name} ({count})</button>; })}
+        {teamTaskCount('unassigned') > 0 && <Pill label={`Unassigned (${teamTaskCount('unassigned')})`} active={teamFilter === 'unassigned'} onClick={() => setTeamFilter('unassigned')} />}
+      </div>
+
       <div className="flex items-center gap-2 mb-5 flex-wrap">
         <div className="flex items-center gap-2" style={{ background: 'var(--card)', padding: '7px 14px', borderRadius: 999, border: '1px solid var(--line)' }}><Search size={13} color="var(--muted)" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tasks..." style={{ background: 'transparent', outline: 'none', fontSize: 13, width: 200 }} /></div>
-        <Pill label={`All (${tasks.length})`} active={filter === 'all'} onClick={() => setFilter('all')} />
-        {buckets.map(b => { const c = tasks.filter(t => t.status === b).length; return <Pill key={b} label={`${STATUS_COLORS[b].label} (${c})`} active={filter === b} onClick={() => setFilter(b)} />; })}
+        <Pill label="All status" active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
+        {buckets.map(b => { const c = filtered.filter(t => t.status === b).length + (statusFilter === b ? 0 : 0); const totalForBucket = (teamFilter === 'all' ? tasks : tasks.filter(t => teamFilter === 'unassigned' ? taskTeamId(t) === 'unassigned' : taskTeamId(t) === teamFilter)).filter(t => t.status === b).length; return <Pill key={b} label={`${STATUS_COLORS[b].label} (${totalForBucket})`} active={statusFilter === b} onClick={() => setStatusFilter(b)} />; })}
       </div>
-      {filtered.length === 0 ? <EmptyState title="No tasks here yet" message="add your first task and let's get cooking!" action={onAdd} actionLabel="Add task" mood="excited" /> : <div className="space-y-2">{filtered.map(t => <TaskRow key={t.id} task={t} team={team} clients={clients} onClick={() => onEdit(t)} onStatusChange={toggleStatus} />)}</div>}
+
+      {selectedTeamObj && (
+        <div className="card mb-4" style={{ borderLeft: `4px solid ${selectedTeamObj.color || 'var(--coral)'}` }}>
+          <div className="flex items-center gap-3 mb-3">
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: (selectedTeamObj.color || 'var(--coral)') + '22', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Folder size={18} color={selectedTeamObj.color || 'var(--coral)'} /></div>
+            <div className="flex-1">
+              <h3 className="display text-xl">{selectedTeamObj.name}</h3>
+              <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1rem', marginTop: -2 }}>{selectedTeamMembers.length} {selectedTeamMembers.length === 1 ? 'member' : 'members'} · {filtered.length} {filtered.length === 1 ? 'task' : 'tasks'}</p>
+            </div>
+            <div style={{ display: 'flex' }}>{selectedTeamMembers.slice(0, 6).map((m, i) => <div key={m.id} title={m.name} style={{ width: 30, height: 30, borderRadius: '50%', background: (selectedTeamObj.color || 'var(--coral)') + '33', border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: selectedTeamObj.color || 'var(--coral-deep)', fontWeight: 600, fontSize: 11, marginLeft: i === 0 ? 0 : -8 }}>{m.name[0]?.toUpperCase()}</div>)}</div>
+          </div>
+          {selectedTeamMembers.length > 0 && (
+            <div className="grid grid-cols-4 gap-2 pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+              {selectedTeamMembers.map(m => { const memberActive = filtered.filter(t => t.assigneeId === m.id && t.status !== 'done').length; const memberDone = filtered.filter(t => t.assigneeId === m.id && t.status === 'done').length; return (
+                <div key={m.id} className="flex items-center gap-2.5 p-2.5" style={{ background: 'var(--bg-warmer)', borderRadius: 12 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: (selectedTeamObj.color || 'var(--coral)') + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', color: selectedTeamObj.color || 'var(--coral-deep)', fontWeight: 600, fontSize: 12, flexShrink: 0 }}>{m.name[0]?.toUpperCase()}</div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <p className="text-xs font-semibold truncate">{m.name}</p>
+                    <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>{memberActive} active · {memberDone} done</p>
+                  </div>
+                </div>
+              ); })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
+        <EmptyState title="No tasks here yet" message="add your first task and let's get cooking!" action={onAdd} actionLabel="Add task" mood="excited" />
+      ) : teamFilter === 'all' ? (
+        <div>
+          {groupedByTeam.map(g => (
+            <div key={g.teamObj.id} className="mb-5">
+              <div className="flex items-center gap-2 mb-2.5" style={{ paddingLeft: 4 }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: g.teamObj.color || 'var(--coral)' }}></div>
+                <h3 className="display text-lg">{g.teamObj.name}</h3>
+                <span className="badge" style={{ background: (g.teamObj.color || 'var(--coral)') + '22', color: g.teamObj.color || 'var(--coral-deep)' }}>{g.tasks.length}</span>
+                <div style={{ display: 'flex', marginLeft: 'auto' }}>{g.members.slice(0, 5).map((m, i) => <div key={m.id} title={m.name} style={{ width: 24, height: 24, borderRadius: '50%', background: (g.teamObj.color || 'var(--coral)') + '33', border: '2px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: g.teamObj.color || 'var(--coral-deep)', fontWeight: 600, fontSize: 10, marginLeft: i === 0 ? 0 : -8 }}>{m.name[0]?.toUpperCase()}</div>)}</div>
+              </div>
+              <div className="space-y-2">{g.tasks.map(t => <TaskRow key={t.id} task={t} team={team} clients={clients} onClick={() => onEdit(t)} onStatusChange={toggleStatus} />)}</div>
+            </div>
+          ))}
+          {unassignedGroup.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center gap-2 mb-2.5" style={{ paddingLeft: 4 }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--muted)' }}></div>
+                <h3 className="display text-lg">Unassigned</h3>
+                <span className="badge" style={{ background: 'var(--line-soft)', color: 'var(--ink-soft)' }}>{unassignedGroup.length}</span>
+              </div>
+              <div className="space-y-2">{unassignedGroup.map(t => <TaskRow key={t.id} task={t} team={team} clients={clients} onClick={() => onEdit(t)} onStatusChange={toggleStatus} />)}</div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">{filtered.map(t => <TaskRow key={t.id} task={t} team={team} clients={clients} onClick={() => onEdit(t)} onStatusChange={toggleStatus} />)}</div>
+      )}
     </div>
   );
 }
