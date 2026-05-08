@@ -552,7 +552,7 @@ function Dashboard({ user }) {
           </div>
         </aside>
         <main className="flex-1 min-h-screen" style={{ padding: '32px 40px', maxWidth: 1380 }}>
-          {view === 'dashboard' && <DashboardView tasks={tasks} team={team} clients={clients} posts={posts} comms={comms} strategies={strategies} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} userEmail={user.email} />}
+          {view === 'dashboard' && <DashboardView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} strategies={strategies} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} userEmail={user.email} />}
           {view === 'tasks' && <TasksView tasks={tasks} team={team} teams={teams} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
           {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} />}
           {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} />}
@@ -577,7 +577,7 @@ function Dashboard({ user }) {
   );
 }
 
-function DashboardView({ tasks, team, clients, posts, comms, strategies, setView, onQuickTask, onQuickPost, userEmail }) {
+function DashboardView({ tasks, team, teams, clients, posts, comms, strategies, setView, onQuickTask, onQuickPost, userEmail }) {
   const todayStr = today();
   const dueToday = tasks.filter(t => t.dueDate === todayStr && t.status !== 'done');
   const overdue = tasks.filter(t => t.dueDate && t.dueDate < todayStr && t.status !== 'done');
@@ -668,6 +668,8 @@ function DashboardView({ tasks, team, clients, posts, comms, strategies, setView
         </div>
       </div>
 
+      <FollowUpCard tasks={tasks} team={team} teams={teams} clients={clients} setView={setView} />
+
       <div className="grid grid-cols-2 gap-4 mt-4">
         <div className="card card-hover">
           <div className="mb-5">
@@ -713,6 +715,129 @@ function StatCard({ label, value, sub, onClick, alert, accent }) {
   );
 }
 function DarkMetric({ label, value }) { return <div className="flex items-center justify-between pb-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><span style={{ opacity: 0.85, fontSize: 13 }}>{label}</span><span className="stat-num" style={{ fontSize: '1.5rem' }}>{value}</span></div>; }
+
+function FollowUpCard({ tasks, team, teams, clients, setView }) {
+  const todayStr = today();
+  const now = new Date();
+  const REVIEW_STUCK_DAYS = 3;
+
+  const followUps = [];
+  const seen = new Set();
+  const addFollowUp = (task, member, reason, urgency, reasonColor) => {
+    const key = task.id;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const memberTeam = teams.find(t => t.id === member.teamId);
+    const client = clients.find(c => c.id === task.clientId);
+    followUps.push({ task, member, memberTeam, client, reason, urgency, reasonColor });
+  };
+
+  tasks.forEach(t => {
+    if (!t.assigneeId || t.status === 'done') return;
+    const member = team.find(m => m.id === t.assigneeId);
+    if (!member) return;
+    if (t.dueDate && t.dueDate < todayStr) {
+      const daysOverdue = Math.floor((new Date(todayStr) - new Date(t.dueDate)) / (1000 * 60 * 60 * 24));
+      addFollowUp(t, member, `⚠️ Overdue by ${daysOverdue} day${daysOverdue === 1 ? '' : 's'}`, 1, 'var(--pink)');
+      return;
+    }
+    if (t.dueDate === todayStr && t.status === 'todo') {
+      addFollowUp(t, member, '⏰ Due today, no progress', 2, '#a07a32');
+      return;
+    }
+    if (t.status === 'review' && t.createdAt) {
+      const daysInReview = Math.floor((now - new Date(t.createdAt)) / (1000 * 60 * 60 * 24));
+      if (daysInReview >= REVIEW_STUCK_DAYS) {
+        addFollowUp(t, member, `📋 Waiting in Review for ${daysInReview} day${daysInReview === 1 ? '' : 's'}`, 3, 'var(--lavender)');
+      }
+    }
+  });
+
+  followUps.sort((a, b) => a.urgency - b.urgency);
+  const onTrackCount = team.filter(m => !followUps.some(f => f.member.id === m.id)).length;
+
+  const sendNudge = (e, item) => {
+    e.stopPropagation();
+    const phone = String(item.member.whatsapp || '').replace(/[^\d]/g, '');
+    if (!phone) {
+      alert(`No WhatsApp number for ${item.member.name}. Add one in the Team page.`);
+      return;
+    }
+    const lines = [];
+    lines.push(`Hi ${item.member.name}! 👋`);
+    lines.push('');
+    lines.push(`Just checking in on this task:`);
+    lines.push('');
+    lines.push(`📌 *${item.task.title}*`);
+    if (item.client) lines.push(`🏢 ${item.client.name}`);
+    lines.push('');
+    if (item.urgency === 1) lines.push(`This was due ${formatDate(item.task.dueDate)} — need any help to get it across the line? ☀️`);
+    else if (item.urgency === 2) lines.push(`It's due today. Anything blocking you? Let me know if you need a hand! ☀️`);
+    else lines.push(`It's been waiting in Review for a few days. Could you take a look when you get a moment? ☀️`);
+    lines.push('');
+    lines.push(`From Studio with Sunny`);
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`;
+    window.open(url, '_blank');
+  };
+
+  return (
+    <div className="card card-hover mt-4">
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <h2 className="display text-xl">Team follow-ups</h2>
+          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1.05rem', marginTop: -2 }}>who needs a nudge today? ✨</p>
+        </div>
+        {followUps.length > 0 ? <span className="badge" style={{ background: 'var(--pink-soft)', color: 'var(--pink)', fontWeight: 600 }}>{followUps.length} need{followUps.length === 1 ? 's' : ''} attention</span> : <span className="badge" style={{ background: 'var(--sage-soft)', color: 'var(--sage)', fontWeight: 600 }}>All clear ✨</span>}
+      </div>
+
+      <div style={{ height: 1, background: 'var(--line)', margin: '14px 0' }}></div>
+
+      {followUps.length === 0 ? (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <Sunny size={48} mood="excited" float />
+          <p className="display text-lg mt-2 mb-1">Everyone's on track!</p>
+          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1.1rem' }}>no overdue tasks, no stuck reviews ☀️</p>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {followUps.slice(0, 6).map(item => {
+            const bgColor = item.urgency === 1 ? 'rgba(217, 126, 156, 0.08)' : item.urgency === 2 ? 'rgba(217, 168, 80, 0.08)' : 'rgba(169, 148, 196, 0.08)';
+            const borderColor = item.urgency === 1 ? 'rgba(217, 126, 156, 0.25)' : item.urgency === 2 ? 'rgba(217, 168, 80, 0.25)' : 'rgba(169, 148, 196, 0.25)';
+            const teamColor = item.memberTeam?.color || 'var(--coral)';
+            return (
+              <div key={item.task.id} className="flex items-center gap-3" style={{ padding: 12, background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 14 }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: teamColor + '33', display: 'flex', alignItems: 'center', justifyContent: 'center', color: teamColor, fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{item.member.name[0]?.toUpperCase()}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="text-sm font-semibold">{item.member.name}</p>
+                    {item.memberTeam && <span className="badge" style={{ background: teamColor + '22', color: teamColor }}>{item.memberTeam.name}</span>}
+                  </div>
+                  <p className="text-xs truncate" style={{ color: 'var(--ink-soft)' }}>{item.task.title}{item.client ? ` · ${item.client.name}` : ''}</p>
+                  <p className="text-xs mt-1" style={{ color: item.reasonColor, fontWeight: 600 }}>{item.reason}</p>
+                </div>
+                <button onClick={(e) => sendNudge(e, item)} style={{ background: '#25D366', color: 'white', padding: '7px 14px', border: 'none', borderRadius: 999, fontSize: 11.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0, boxShadow: '0 1.5px 0 #128C7E', cursor: 'pointer' }} title={item.member.whatsapp ? `Send to ${item.member.whatsapp}` : 'Add a WhatsApp number first'}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><path d="M17.498 14.382c-.301-.15-1.767-.867-2.04-.966-.273-.101-.473-.15-.673.15-.197.295-.771.964-.944 1.162-.175.195-.349.21-.646.075-.3-.15-1.263-.465-2.403-1.485-.888-.795-1.484-1.77-1.66-2.07-.174-.3-.019-.465.13-.615.136-.135.301-.345.451-.523.146-.181.194-.301.297-.496.1-.21.049-.375-.025-.524-.075-.15-.672-1.62-.922-2.206-.24-.584-.487-.51-.672-.51-.172-.015-.371-.015-.571-.015-.2 0-.523.074-.797.359-.273.3-1.045 1.02-1.045 2.475s1.07 2.865 1.219 3.075c.149.195 2.105 3.195 5.1 4.485.714.3 1.27.48 1.704.629.714.227 1.365.195 1.88.121.574-.091 1.767-.721 2.016-1.426.255-.705.255-1.29.18-1.425-.074-.135-.27-.21-.57-.345"/></svg>
+                  Nudge
+                </button>
+              </div>
+            );
+          })}
+          {followUps.length > 6 && <p className="text-xs text-center pt-2" style={{ color: 'var(--ink-soft)' }}>+ {followUps.length - 6} more — view all in <button onClick={() => setView('tasks')} style={{ color: 'var(--coral)', fontWeight: 600, textDecoration: 'underline' }}>Tasks</button></p>}
+        </div>
+      )}
+
+      {followUps.length > 0 && onTrackCount > 0 && (
+        <>
+          <div style={{ height: 1, background: 'var(--line)', margin: '14px 0 12px' }}></div>
+          <div className="flex items-center justify-between">
+            <p className="hand" style={{ color: 'var(--ink-soft)', fontSize: '1.05rem', margin: 0 }}>{onTrackCount} {onTrackCount === 1 ? 'team member' : 'team members'} on track ✨</p>
+            <button onClick={() => setView('team')} className="btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }}>View all team <ChevronRight size={11} /></button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 function PageHeader({ title, subtitle, action }) {
   return (
