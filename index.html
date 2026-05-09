@@ -90,7 +90,7 @@
 const { useState, useEffect, useCallback, useRef } = React;
 
 const SUPABASE_URL = 'https://zgghvwoxkkhrxfqmyyzn.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnZ2h2d294a2tocnhmcW15eXpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxMjc4NjAsImV4cCI6MjA5MzcwMzg2MH0._gsNIrI4aPFghdpXDp_V1x8L6lJqJqptOzd6_zs_gjUx';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnZ2h2d294a2tocnhmcW15eXpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxMjc4NjAsImV4cCI6MjA5MzcwMzg2MH0._gsNIrI4aPFghdpXDp_V1x8L6lJqJqptOzd6_zs_gjU';
 const sb = (SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY.length > 50) ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 function Sunny({ size = 48, mood = 'happy', float: doFloat = false }) {
