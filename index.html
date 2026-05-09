@@ -142,6 +142,7 @@ const Plus = I(<><path d="M5 12h14"/><path d="M12 5v14"/></>);
 const X = I(<><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>);
 const Edit2 = I(<><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></>);
 const Trash2 = I(<><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>);
+const Pin = I(<><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></>);
 const Clock = I(<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>);
 const AlertCircle = I(<><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></>);
 const CheckCircle2 = I(<><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></>);
@@ -165,11 +166,12 @@ const Folder = I(<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1
 const Heart = I(<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/>);
 const Eye = I(<><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></>);
 const Upload = I(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></>);
+const Download = I(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></>);
 const FileText = I(<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></>);
 const ArrowRight = I(<><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></>);
 const Sparkles = I(<><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></>);
 
-const TABLES = ['teams', 'team', 'clients', 'tasks', 'posts', 'sheets', 'strategies', 'comms', 'instagram_reports'];
+const TABLES = ['teams', 'team', 'clients', 'tasks', 'posts', 'sheets', 'strategies', 'comms', 'instagram_reports', 'notes'];
 const STATUS_COLORS = { todo: { bg: 'var(--line-soft)', text: 'var(--ink-soft)', label: 'To do' }, progress: { bg: 'var(--gold-soft)', text: '#a07a32', label: 'In progress' }, review: { bg: 'var(--lavender-soft)', text: 'var(--lavender)', label: 'Review' }, done: { bg: 'var(--sage-soft)', text: 'var(--sage)', label: 'Done' }, blocked: { bg: 'var(--pink-soft)', text: 'var(--pink)', label: 'Blocked' } };
 const PRIORITY_COLORS = { low: 'var(--muted)', medium: 'var(--gold)', high: 'var(--coral)' };
 const PLATFORMS = [
@@ -604,6 +606,224 @@ function exportMemberReportExcel(member, memberTeam, memberTasks, clients, perio
   XLSX.writeFile(wb, safeName + '_' + periodLabel.toLowerCase().replace(/[^a-z0-9]/gi, '_') + '_' + today() + '.xlsx');
 }
 
+function generateCustomBundlePDF(opts) {
+  const { from, to, includes, tasks, posts, comms, igReports, strategies, team, teams, clients } = opts;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+
+  const inRange = (d) => { if (!d) return false; const s = String(d).slice(0, 10); return s >= from && s <= to; };
+  const memberName = (id) => team.find(m => m.id === id)?.name || 'Unassigned';
+  const teamName = (id) => teams.find(t => t.id === id)?.name || 'No team';
+  const clientName = (id) => clients.find(c => c.id === id)?.name || 'No client';
+
+  // Cover page
+  doc.setFillColor(58, 45, 45); doc.rect(0, 0, pageW, 100, 'F');
+  doc.setFillColor(232, 145, 119); doc.rect(0, 96, pageW, 4, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold').setFontSize(24);
+  doc.text('Studio Bundle Report', margin, 44);
+  doc.setFont('helvetica', 'normal').setFontSize(11);
+  doc.text(formatDate(from) + ' — ' + formatDate(to), margin, 70);
+
+  let y = 130;
+  doc.setTextColor(58, 45, 45);
+  doc.setFont('helvetica', 'bold').setFontSize(14);
+  doc.text('Summary', margin, y); y += 18;
+  doc.setFont('helvetica', 'normal').setFontSize(10);
+  doc.setTextColor(107, 88, 86);
+
+  const rangeTasks = tasks.filter(t => inRange(t.createdAt) || inRange(t.dueDate));
+  const rangePosts = posts.filter(p => inRange(p.scheduledDate));
+  const rangeComms = comms.filter(c => inRange(c.date));
+  const rangeIg    = (igReports || []).filter(r => r.month && r.month >= from.slice(0, 7) && r.month <= to.slice(0, 7));
+  const rangeStrat = (strategies || []).filter(s => inRange(s.createdAt) || inRange(s.updatedAt));
+
+  const summaryLines = [
+    'Generated: ' + new Date().toLocaleDateString(),
+    'Tasks in range: ' + rangeTasks.length + ' (' + rangeTasks.filter(t => t.status === 'done').length + ' completed)',
+    'Posts published: ' + rangePosts.filter(p => p.status === 'published').length + ' of ' + rangePosts.length,
+    'Conversations logged: ' + rangeComms.length,
+    'Instagram reports: ' + rangeIg.length,
+    'Strategy notes: ' + rangeStrat.length,
+  ];
+  summaryLines.forEach(line => { doc.text(line, margin, y); y += 14; });
+  y += 14;
+
+  const ensureSpace = (h) => { if (y + h > pageH - 60) { doc.addPage(); y = margin; } };
+  const sectionHeader = (title, subtitle) => { ensureSpace(40); doc.setTextColor(58, 45, 45); doc.setFont('helvetica', 'bold').setFontSize(14); doc.text(title, margin, y); if (subtitle) { y += 14; doc.setFont('helvetica', 'normal').setFontSize(9); doc.setTextColor(168, 155, 151); doc.text(subtitle, margin, y); } y += 12; };
+
+  // Tasks section
+  if (includes.tasks && rangeTasks.length > 0) {
+    sectionHeader('Tasks', rangeTasks.length + ' tasks');
+    const rows = rangeTasks.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(t => {
+      const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
+      return [(t.title || '').slice(0, 45) + ((t.title || '').length > 45 ? '…' : ''), memberName(t.assigneeId), clientName(t.clientId), statusLabel, t.priority || '—', t.dueDate ? formatDate(t.dueDate) : '—'];
+    });
+    doc.autoTable({ startY: y, head: [['Task', 'Assignee', 'Client', 'Status', 'Priority', 'Due']], body: rows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: [232, 145, 119], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] }, columnStyles: { 0: { cellWidth: 160 } } });
+    y = doc.lastAutoTable.finalY + 18;
+  }
+
+  // Posts section
+  if (includes.posts && rangePosts.length > 0) {
+    sectionHeader('Posts', rangePosts.length + ' posts (' + rangePosts.filter(p => p.status === 'published').length + ' published)');
+    const rows = rangePosts.sort((a, b) => (b.scheduledDate || '').localeCompare(a.scheduledDate || '')).map(p => [
+      formatDate(p.scheduledDate),
+      clientName(p.clientId),
+      (p.platform || '—'),
+      p.status || 'draft',
+      (p.likes || 0).toLocaleString(),
+      (p.reach || 0).toLocaleString(),
+      (p.caption || '').slice(0, 40) + ((p.caption || '').length > 40 ? '…' : ''),
+    ]);
+    doc.autoTable({ startY: y, head: [['Date', 'Client', 'Platform', 'Status', 'Likes', 'Reach', 'Caption']], body: rows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: [125, 99, 163], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] }, columnStyles: { 6: { cellWidth: 120 } } });
+    y = doc.lastAutoTable.finalY + 18;
+  }
+
+  // Team section
+  if (includes.team && team.length > 0) {
+    sectionHeader('Team performance', 'tasks per member in range');
+    const rows = team.map(m => {
+      const mt = rangeTasks.filter(t => t.assigneeId === m.id);
+      const done = mt.filter(t => t.status === 'done').length;
+      const rate = mt.length > 0 ? Math.round((done / mt.length) * 100) + '%' : '—';
+      return [m.name || '—', m.role || '—', teamName(m.teamId), mt.length, done, rate];
+    }).filter(r => r[3] > 0).sort((a, b) => b[4] - a[4]);
+    if (rows.length > 0) {
+      doc.autoTable({ startY: y, head: [['Name', 'Role', 'Team', 'Total', 'Done', 'Rate']], body: rows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: [90, 128, 104], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] } });
+      y = doc.lastAutoTable.finalY + 18;
+    }
+  }
+
+  // Conversations section
+  if (includes.comms && rangeComms.length > 0) {
+    sectionHeader('Client conversations', rangeComms.length + ' logged');
+    const rows = rangeComms.sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(c => [formatDate(c.date), clientName(c.clientId), c.type || '—', (c.summary || '').slice(0, 70) + ((c.summary || '').length > 70 ? '…' : '')]);
+    doc.autoTable({ startY: y, head: [['Date', 'Client', 'Type', 'Summary']], body: rows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: [74, 117, 145], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] }, columnStyles: { 3: { cellWidth: 220 } } });
+    y = doc.lastAutoTable.finalY + 18;
+  }
+
+  // Instagram metrics
+  if (includes.instagram && rangeIg.length > 0) {
+    sectionHeader('Instagram metrics', rangeIg.length + ' monthly reports');
+    const rows = rangeIg.sort((a, b) => (b.month || '').localeCompare(a.month || '')).map(r => [r.month || '—', clientName(r.clientId), (r.followers || 0).toLocaleString(), (r.followersGained || 0).toLocaleString(), (r.reach || 0).toLocaleString(), (r.engagementRate || 0) + '%']);
+    doc.autoTable({ startY: y, head: [['Month', 'Client', 'Followers', 'Gained', 'Reach', 'Eng. rate']], body: rows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: [217, 168, 80], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] } });
+    y = doc.lastAutoTable.finalY + 18;
+  }
+
+  // Strategy notes
+  if (includes.strategy && rangeStrat.length > 0) {
+    sectionHeader('Strategy notes', rangeStrat.length + ' notes');
+    rangeStrat.forEach(s => {
+      ensureSpace(40);
+      doc.setFont('helvetica', 'bold').setFontSize(10);
+      doc.setTextColor(58, 45, 45);
+      doc.text((s.title || 'Untitled') + ' — ' + clientName(s.clientId), margin, y); y += 14;
+      doc.setFont('helvetica', 'normal').setFontSize(9);
+      doc.setTextColor(107, 88, 86);
+      const lines = doc.splitTextToSize((s.content || s.notes || '').slice(0, 600), pageW - margin * 2);
+      lines.forEach(line => { ensureSpace(12); doc.text(line, margin, y); y += 12; });
+      y += 8;
+    });
+  }
+
+  // Footer on all pages
+  const pages = doc.internal.pages.length - 1;
+  for (let i = 1; i <= pages; i++) { doc.setPage(i); doc.setFont('helvetica', 'normal').setFontSize(8); doc.setTextColor(168, 155, 151); doc.text('Generated ' + new Date().toLocaleDateString() + ' · Studio with Sunny', margin, pageH - 20); doc.text('Page ' + i + ' of ' + pages, pageW - margin - 50, pageH - 20); }
+
+  doc.save('studio_bundle_' + from + '_to_' + to + '.pdf');
+}
+
+function exportCustomBundleExcel(opts) {
+  const { from, to, includes, tasks, posts, comms, igReports, strategies, team, teams, clients } = opts;
+  const wb = XLSX.utils.book_new();
+  const inRange = (d) => { if (!d) return false; const s = String(d).slice(0, 10); return s >= from && s <= to; };
+  const memberName = (id) => team.find(m => m.id === id)?.name || 'Unassigned';
+  const teamName = (id) => teams.find(t => t.id === id)?.name || 'No team';
+  const clientName = (id) => clients.find(c => c.id === id)?.name || 'No client';
+
+  const rangeTasks = tasks.filter(t => inRange(t.createdAt) || inRange(t.dueDate));
+  const rangePosts = posts.filter(p => inRange(p.scheduledDate));
+  const rangeComms = comms.filter(c => inRange(c.date));
+  const rangeIg    = (igReports || []).filter(r => r.month && r.month >= from.slice(0, 7) && r.month <= to.slice(0, 7));
+  const rangeStrat = (strategies || []).filter(s => inRange(s.createdAt) || inRange(s.updatedAt));
+
+  const summary = [
+    ['Studio Bundle Report'], [],
+    ['From', from], ['To', to], ['Generated', new Date().toLocaleDateString()], [],
+    ['INCLUDES'],
+    ['Tasks', rangeTasks.length],
+    ['Posts published', rangePosts.filter(p => p.status === 'published').length],
+    ['Posts total', rangePosts.length],
+    ['Conversations', rangeComms.length],
+    ['Instagram reports', rangeIg.length],
+    ['Strategy notes', rangeStrat.length],
+  ];
+  const ws1 = XLSX.utils.aoa_to_sheet(summary);
+  ws1['!cols'] = [{ wch: 24 }, { wch: 22 }];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+
+  if (includes.tasks) {
+    const rows = [['Title', 'Assignee', 'Client', 'Status', 'Priority', 'Due Date', 'Created']];
+    rangeTasks.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).forEach(t => {
+      const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
+      rows.push([t.title || '', memberName(t.assigneeId), clientName(t.clientId), statusLabel, t.priority || '', t.dueDate ? formatDate(t.dueDate) : '', t.createdAt ? formatDate(t.createdAt) : '']);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 50 }, { wch: 22 }, { wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
+  }
+
+  if (includes.posts) {
+    const rows = [['Date', 'Client', 'Platform', 'Status', 'Likes', 'Comments', 'Reach', 'Saves', 'Caption']];
+    rangePosts.sort((a, b) => (b.scheduledDate || '').localeCompare(a.scheduledDate || '')).forEach(p => rows.push([p.scheduledDate || '', clientName(p.clientId), p.platform || '', p.status || 'draft', p.likes || 0, p.comments || 0, p.reach || 0, p.saves || 0, p.caption || '']));
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 14 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 50 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Posts');
+  }
+
+  if (includes.team) {
+    const rows = [['Name', 'Role', 'Team', 'Email', 'Total Tasks', 'Completed', 'Completion Rate']];
+    team.forEach(m => {
+      const mt = rangeTasks.filter(t => t.assigneeId === m.id);
+      const done = mt.filter(t => t.status === 'done').length;
+      const rate = mt.length > 0 ? Math.round((done / mt.length) * 100) + '%' : '—';
+      rows.push([m.name || '', m.role || '', teamName(m.teamId), m.email || '', mt.length, done, rate]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Team');
+  }
+
+  if (includes.comms) {
+    const rows = [['Date', 'Client', 'Type', 'Summary']];
+    rangeComms.sort((a, b) => (b.date || '').localeCompare(a.date || '')).forEach(c => rows.push([c.date ? formatDate(c.date) : '', clientName(c.clientId), c.type || '', c.summary || '']));
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Conversations');
+  }
+
+  if (includes.instagram) {
+    const rows = [['Month', 'Client', 'Followers', 'Gained', 'Reach', 'Impressions', 'Engagement %', 'Posts', 'Reels']];
+    rangeIg.sort((a, b) => (b.month || '').localeCompare(a.month || '')).forEach(r => rows.push([r.month || '', clientName(r.clientId), r.followers || 0, r.followersGained || 0, r.reach || 0, r.impressions || 0, r.engagementRate || 0, r.totalPosts || 0, r.totalReels || 0]));
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 8 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Instagram');
+  }
+
+  if (includes.strategy) {
+    const rows = [['Title', 'Client', 'Content', 'Updated']];
+    rangeStrat.forEach(s => rows.push([s.title || '', clientName(s.clientId), (s.content || s.notes || ''), s.updatedAt ? formatDate(s.updatedAt) : (s.createdAt ? formatDate(s.createdAt) : '')]));
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 30 }, { wch: 22 }, { wch: 80 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Strategy');
+  }
+
+  XLSX.writeFile(wb, 'studio_bundle_' + from + '_to_' + to + '.xlsx');
+}
+
 const fetchTable = async (table) => { const { data, error } = await sb.from(table).select('*'); if (error) { console.error(`fetch ${table}:`, error); return []; } return data.map(toCamel); };
 const upsertItem = async (table, item, userId) => { const { id, createdAt, ...rest } = item; const cleaned = {}; for (const [k, v] of Object.entries(rest)) { cleaned[k] = (v === '' && (k.endsWith('Id') || k === 'dueDate' || k === 'scheduledDate' || k === 'date')) ? null : v; } const payload = toSnake(cleaned); const op = id ? sb.from(table).update(payload).eq('id', id) : sb.from(table).insert({ ...payload, user_id: userId }); const { error } = await op; if (error) { console.error(`save ${table}:`, error); alert('Save failed: ' + error.message); } };
 const deleteItem = async (table, id) => { const { error } = await sb.from(table).delete().eq('id', id); if (error) console.error(`delete ${table}:`, error); };
@@ -673,9 +893,10 @@ function Dashboard({ user }) {
   const [strategies, setStrategies] = useState([]);
   const [comms, setComms] = useState([]);
   const [igReports, setIgReports] = useState([]);
+  const [notes, setNotes] = useState([]);
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(true);
-  const setters = { tasks: setTasks, team: setTeam, teams: setTeams, clients: setClients, posts: setPosts, sheets: setSheets, strategies: setStrategies, comms: setComms, instagram_reports: setIgReports };
+  const setters = { tasks: setTasks, team: setTeam, teams: setTeams, clients: setClients, posts: setPosts, sheets: setSheets, strategies: setStrategies, comms: setComms, instagram_reports: setIgReports, notes: setNotes };
   const refetch = useCallback(async (table) => { const data = await fetchTable(table); setters[table]?.(data); }, []);
   useEffect(() => { (async () => { const results = await Promise.all(TABLES.map(fetchTable)); TABLES.forEach((t, i) => setters[t]?.(results[i])); setLoading(false); })(); }, [user.id]);
   useEffect(() => { if (loading) return; const seedKey = `studio:seeded:${user.id}`; if (localStorage.getItem(seedKey)) return; if (teams.length > 0) { localStorage.setItem(seedKey, '1'); return; } const payload = DEFAULT_TEAMS.map(t => ({ ...t, user_id: user.id })); sb.from('teams').insert(payload).then(({ error }) => { if (!error) { localStorage.setItem(seedKey, '1'); refetch('teams'); } }); }, [loading, teams.length, user.id, refetch]);
@@ -733,12 +954,12 @@ function Dashboard({ user }) {
           </div>
         </aside>
         <main className="flex-1 min-h-screen" style={{ padding: '32px 40px', maxWidth: 1380 }}>
-          {view === 'dashboard' && <DashboardView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} strategies={strategies} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} userEmail={user.email} />}
+          {view === 'dashboard' && <DashboardView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} strategies={strategies} notes={notes} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} onSaveNote={async (n) => { await saveItem('notes', n); }} onDeleteNote={async (id) => { await removeItem('notes', id); }} userEmail={user.email} />}
           {view === 'tasks' && <TasksView tasks={tasks} team={team} teams={teams} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
           {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} clients={clients} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} />}
           {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} posts={posts} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} />}
           {view === 'calendar' && <CalendarView posts={posts} clients={clients} updateStatus={updatePostStatus} onAdd={() => setModal({ type: 'post' })} onEdit={(p) => setModal({ type: 'post', data: p })} />}
-          {view === 'reports' && <ReportsView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} igReports={igReports} onAddIgReport={() => setModal({ type: 'igReport' })} onImportIg={() => setModal({ type: 'igImport' })} onEditIgReport={(r) => setModal({ type: 'igReport', data: r })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
+          {view === 'reports' && <ReportsView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} igReports={igReports} strategies={strategies} onAddIgReport={() => setModal({ type: 'igReport' })} onImportIg={() => setModal({ type: 'igImport' })} onEditIgReport={(r) => setModal({ type: 'igReport', data: r })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'sheets' && <SheetsView sheets={sheets} onAdd={() => setModal({ type: 'sheet' })} onEdit={(s) => setModal({ type: 'sheet', data: s })} />}
           {view === 'strategy' && <StrategyView strategies={strategies} clients={clients} onAdd={() => setModal({ type: 'strategy' })} onEdit={(s) => setModal({ type: 'strategy', data: s })} />}
         </main>
@@ -758,7 +979,7 @@ function Dashboard({ user }) {
   );
 }
 
-function DashboardView({ tasks, team, teams, clients, posts, comms, strategies, setView, onQuickTask, onQuickPost, userEmail }) {
+function DashboardView({ tasks, team, teams, clients, posts, comms, strategies, notes, setView, onQuickTask, onQuickPost, onSaveNote, onDeleteNote, userEmail }) {
   const todayStr = today();
   const dueToday = tasks.filter(t => t.dueDate === todayStr && t.status !== 'done');
   const overdue = tasks.filter(t => t.dueDate && t.dueDate < todayStr && t.status !== 'done');
@@ -882,9 +1103,114 @@ function DashboardView({ tasks, team, teams, clients, posts, comms, strategies, 
           <button className="mt-5 w-full" style={{ background: 'rgba(255,255,255,0.12)', color: 'white', padding: '10px 18px', borderRadius: 999, fontWeight: 500, fontSize: 13, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.15s', border: '1px solid rgba(255,255,255,0.18)' }} onClick={() => setView('reports')} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}><BarChart3 size={13} /> View detailed reports</button>
         </div>
       </div>
+
+      <NotesSection notes={notes || []} onSaveNote={onSaveNote} onDeleteNote={onDeleteNote} />
     </div>
   );
 }
+function NotesSection({ notes, onSaveNote, onDeleteNote }) {
+  const [editing, setEditing] = useState(null); // null | { id?, body, color } when adding/editing
+  const NOTE_PALETTES = [
+    { id: 'gold',     bg: '#fff7e0', border: '#f5e9c8', accent: '#a07a32' },
+    { id: 'coral',    bg: '#fce5dd', border: '#f5d0c0', accent: '#c97050' },
+    { id: 'lavender', bg: '#ece1f0', border: '#d9c8e3', accent: '#7d63a3' },
+    { id: 'sage',     bg: '#e0ebe2', border: '#c8d9cc', accent: '#5a8068' },
+    { id: 'sky',      bg: '#e0ebf2', border: '#c8d6e3', accent: '#4a7591' },
+    { id: 'pink',     bg: '#f5dde6', border: '#e8c8d4', accent: '#c95080' },
+  ];
+  const paletteFor = (id) => NOTE_PALETTES.find(p => p.id === id) || NOTE_PALETTES[0];
+
+  // Sort: pinned first, then most recent
+  const sorted = [...(notes || [])].sort((a, b) => {
+    if ((b.pinned ? 1 : 0) !== (a.pinned ? 1 : 0)) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+    return (b.createdAt || '').localeCompare(a.createdAt || '');
+  });
+
+  const startNew = () => setEditing({ body: '', color: NOTE_PALETTES[Math.floor(Math.random() * NOTE_PALETTES.length)].id, pinned: false });
+  const startEdit = (n) => setEditing({ ...n });
+  const save = async () => {
+    if (!editing.body.trim()) { setEditing(null); return; }
+    await onSaveNote(editing);
+    setEditing(null);
+  };
+  const togglePin = async (n) => { await onSaveNote({ ...n, pinned: !n.pinned }); };
+  const remove = async (n) => { if (window.confirm('Delete this note?')) await onDeleteNote(n.id); };
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between mb-3" style={{ paddingLeft: 4 }}>
+        <div>
+          <h2 className="display text-xl" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--gold-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={14} color="#a07a32" /></span>
+            Notes
+          </h2>
+          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1rem', marginTop: -2, paddingLeft: 40 }}>your scratchpad — important things, ideas, reminders ✨</p>
+        </div>
+        <button className="btn-primary" onClick={startNew}><Plus size={13} /> New note</button>
+      </div>
+
+      {sorted.length === 0 && !editing ? (
+        <button onClick={startNew} className="card text-center" style={{ padding: '34px 20px', width: '100%', borderStyle: 'dashed', cursor: 'pointer', background: 'transparent' }}>
+          <Sunny size={36} mood="happy" />
+          <p className="display text-lg mt-2 mb-1">Nothing jotted yet</p>
+          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1.05rem' }}>tap to add your first note 📌</p>
+        </button>
+      ) : (
+        <div className="grid grid-cols-3 gap-3">
+          {sorted.map(n => {
+            const palette = paletteFor(n.color);
+            const isEditing = editing && editing.id === n.id;
+            if (isEditing) return null; // editor renders below in its own slot
+            return (
+              <div key={n.id} style={{ background: palette.bg, border: `1px solid ${palette.border}`, borderRadius: 16, padding: 14, position: 'relative', minHeight: 130, display: 'flex', flexDirection: 'column' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="hand" style={{ fontSize: '0.95rem', color: palette.accent }}>{n.createdAt ? formatDate(n.createdAt) : 'today'}</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => togglePin(n)} title={n.pinned ? 'Unpin' : 'Pin'} style={{ width: 22, height: 22, borderRadius: 6, background: n.pinned ? palette.accent + '33' : 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer' }}>
+                      <Pin size={11} color={palette.accent} style={{ fill: n.pinned ? palette.accent : 'none' }} />
+                    </button>
+                    <button onClick={() => startEdit(n)} title="Edit" style={{ width: 22, height: 22, borderRadius: 6, background: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer' }}>
+                      <Edit2 size={10} color={palette.accent} />
+                    </button>
+                    <button onClick={() => remove(n)} title="Delete" style={{ width: 22, height: 22, borderRadius: 6, background: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer' }}>
+                      <Trash2 size={10} color={palette.accent} />
+                    </button>
+                  </div>
+                </div>
+                <p className="hand" style={{ fontSize: '1.15rem', lineHeight: 1.5, margin: 0, color: 'var(--ink)', whiteSpace: 'pre-wrap', flex: 1 }}>{n.body}</p>
+              </div>
+            );
+          })}
+          {editing && (
+            <NoteEditorTile editing={editing} setEditing={setEditing} onSave={save} onCancel={() => setEditing(null)} palettes={NOTE_PALETTES} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NoteEditorTile({ editing, setEditing, onSave, onCancel, palettes }) {
+  const palette = palettes.find(p => p.id === editing.color) || palettes[0];
+  return (
+    <div style={{ background: palette.bg, border: `2px solid ${palette.accent}`, borderRadius: 16, padding: 14, position: 'relative', minHeight: 130, display: 'flex', flexDirection: 'column' }}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="hand" style={{ fontSize: '0.95rem', color: palette.accent }}>{editing.id ? 'Editing' : 'New note'}</span>
+        <div className="flex items-center gap-1">
+          {palettes.map(p => (
+            <button key={p.id} onClick={() => setEditing({ ...editing, color: p.id })} title={p.id} style={{ width: 18, height: 18, borderRadius: 6, background: p.bg, border: editing.color === p.id ? `2px solid ${p.accent}` : `1px solid ${p.border}`, cursor: 'pointer' }} />
+          ))}
+        </div>
+      </div>
+      <textarea autoFocus value={editing.body} onChange={e => setEditing({ ...editing, body: e.target.value })} placeholder="Jot it down..." className="hand" style={{ width: '100%', flex: 1, minHeight: 70, background: 'transparent', border: 'none', outline: 'none', fontSize: '1.15rem', lineHeight: 1.5, color: 'var(--ink)', resize: 'none', fontFamily: 'Caveat, cursive' }} />
+      <div className="flex justify-end gap-2 mt-2">
+        <button onClick={onCancel} style={{ padding: '5px 12px', borderRadius: 999, background: 'transparent', border: 'none', fontSize: 12, color: palette.accent, cursor: 'pointer' }}>Cancel</button>
+        <button onClick={onSave} style={{ padding: '5px 14px', borderRadius: 999, background: palette.accent, color: 'white', border: 'none', fontWeight: 500, fontSize: 12, cursor: 'pointer' }}>Save</button>
+      </div>
+    </div>
+  );
+}
+
 function StatCard({ label, value, sub, onClick, alert, accent }) {
   return (
     <button onClick={onClick} className="card card-hover" style={{ textAlign: 'left', cursor: onClick ? 'pointer' : 'default', padding: 18, position: 'relative', overflow: 'hidden' }}>
@@ -1564,7 +1890,7 @@ function CalendarView({ posts, clients, updateStatus, onAdd, onEdit }) {
   );
 }
 
-function ReportsView({ tasks, team, teams, clients, posts, comms, igReports, onAddIgReport, onImportIg, onEditIgReport, onEditPost }) {
+function ReportsView({ tasks, team, teams, clients, posts, comms, igReports, strategies, onAddIgReport, onImportIg, onEditIgReport, onEditPost }) {
   const [tab, setTab] = useState('overview');
   const [period, setPeriod] = useState('month');
   const periodTasks = tasks.filter(t => isInPeriod(t.createdAt, period));
@@ -1574,6 +1900,7 @@ function ReportsView({ tasks, team, teams, clients, posts, comms, igReports, onA
   return (
     <div className="fade-in">
       <PageHeader title="Reports" subtitle="how everything's going 📊" />
+      <CustomExportPanel tasks={tasks} posts={posts} comms={comms} igReports={igReports} strategies={strategies || []} team={team} teams={teams} clients={clients} />
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div className="flex gap-2">{[{ id: 'overview', label: 'Overview' }, { id: 'team', label: 'Team' }, { id: 'posts', label: 'Posts' }, { id: 'instagram', label: 'Instagram' }].map(t => <Pill key={t.id} label={t.label} active={tab === t.id} onClick={() => setTab(t.id)} />)}</div>
         {tab !== 'instagram' && <div className="flex gap-1 p-1 rounded-full" style={{ background: 'var(--card)', border: '1px solid var(--line)' }}>{[{ id: 'week', label: 'Week' }, { id: 'month', label: 'Month' }, { id: 'quarter', label: 'Quarter' }, { id: 'all', label: 'All' }].map(p => <button key={p.id} onClick={() => setPeriod(p.id)} style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: period === p.id ? 'var(--coral)' : 'transparent', color: period === p.id ? 'white' : 'var(--ink-soft)', transition: 'all 0.15s', border: 'none' }}>{p.label}</button>)}</div>}
@@ -1582,6 +1909,115 @@ function ReportsView({ tasks, team, teams, clients, posts, comms, igReports, onA
       {tab === 'team' && <TeamReport team={team} teams={teams} periodTasks={periodTasks} tasks={tasks} periodLabel={periodLabel} />}
       {tab === 'posts' && <PostsReport periodPosts={periodPosts} clients={clients} onEditPost={onEditPost} periodLabel={periodLabel} />}
       {tab === 'instagram' && <InstagramReport reports={igReports} clients={clients} posts={posts} onAdd={onAddIgReport} onImport={onImportIg} onEdit={onEditIgReport} />}
+    </div>
+  );
+}
+
+function CustomExportPanel({ tasks, posts, comms, igReports, strategies, team, teams, clients }) {
+  const todayStr = today();
+  const monthStart = todayStr.slice(0, 8) + '01';
+  const [from, setFrom] = useState(monthStart);
+  const [to, setTo] = useState(todayStr);
+  const [includes, setIncludes] = useState({ tasks: true, posts: true, team: true, comms: true, instagram: false, strategy: false });
+  const [expanded, setExpanded] = useState(false);
+
+  const inRange = (d) => { if (!d) return false; const s = String(d).slice(0, 10); return s >= from && s <= to; };
+  const counts = {
+    tasks: tasks.filter(t => inRange(t.createdAt) || inRange(t.dueDate)).length,
+    posts: posts.filter(p => inRange(p.scheduledDate) && p.status === 'published').length,
+    comms: comms.filter(c => inRange(c.date)).length,
+    instagram: (igReports || []).filter(r => r.month && r.month >= from.slice(0, 7) && r.month <= to.slice(0, 7)).length,
+    strategy: (strategies || []).filter(s => inRange(s.createdAt) || inRange(s.updatedAt)).length,
+  };
+
+  const setQuickRange = (id) => {
+    const now = new Date();
+    const fmt = (d) => d.toISOString().slice(0, 10);
+    if (id === 'this-month') { setFrom(fmt(new Date(now.getFullYear(), now.getMonth(), 1))); setTo(todayStr); }
+    else if (id === 'last-month') { const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1); const lmEnd = new Date(now.getFullYear(), now.getMonth(), 0); setFrom(fmt(lm)); setTo(fmt(lmEnd)); }
+    else if (id === 'last-7') { const d = new Date(now); d.setDate(d.getDate() - 6); setFrom(fmt(d)); setTo(todayStr); }
+    else if (id === 'this-quarter') { const qs = Math.floor(now.getMonth() / 3) * 3; setFrom(fmt(new Date(now.getFullYear(), qs, 1))); setTo(todayStr); }
+    else if (id === 'all') { setFrom('2020-01-01'); setTo(todayStr); }
+  };
+
+  const buildOpts = () => ({ from, to, includes, tasks, posts, comms, igReports: igReports || [], strategies: strategies || [], team, teams, clients });
+  const downloadPDF = () => {
+    if (from > to) { alert('"From" date must be before "To" date.'); return; }
+    if (!Object.values(includes).some(Boolean)) { alert('Pick at least one section to include.'); return; }
+    generateCustomBundlePDF(buildOpts());
+  };
+  const downloadExcel = () => {
+    if (from > to) { alert('"From" date must be before "To" date.'); return; }
+    if (!Object.values(includes).some(Boolean)) { alert('Pick at least one section to include.'); return; }
+    exportCustomBundleExcel(buildOpts());
+  };
+  const toggleInclude = (k) => setIncludes(prev => ({ ...prev, [k]: !prev[k] }));
+
+  if (!expanded) {
+    return (
+      <button onClick={() => setExpanded(true)} className="card-hover" style={{ width: '100%', background: 'linear-gradient(120deg, var(--coral-soft) 0%, var(--gold-soft) 100%)', borderRadius: 18, padding: '14px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+        <div style={{ width: 38, height: 38, borderRadius: 12, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Download size={16} color="var(--coral-deep)" /></div>
+        <div style={{ flex: 1 }}>
+          <p className="display" style={{ fontSize: 16, fontWeight: 500, margin: 0, lineHeight: 1.1 }}>Custom export</p>
+          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', margin: '2px 0 0' }}>download anything for any window of time ✨</p>
+        </div>
+        <ChevronRight size={14} color="var(--coral-deep)" />
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ background: 'linear-gradient(120deg, var(--coral-soft) 0%, var(--gold-soft) 100%)', borderRadius: 22, padding: 24, marginBottom: 16 }}>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3">
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Download size={18} color="var(--coral-deep)" /></div>
+          <div>
+            <p className="display" style={{ fontSize: 18, fontWeight: 500, margin: 0, lineHeight: 1 }}>Custom export</p>
+            <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1rem', margin: '2px 0 0' }}>pick a date range, choose what's in, hit download 📦</p>
+          </div>
+        </div>
+        <button onClick={() => setExpanded(false)} className="btn-ghost text-xs">Hide</button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <Field label="From"><input type="date" className="input-field" value={from} onChange={e => setFrom(e.target.value)} max={to} /></Field>
+        <Field label="To"><input type="date" className="input-field" value={to} onChange={e => setTo(e.target.value)} max={todayStr} min={from} /></Field>
+      </div>
+
+      <div className="flex gap-1.5 mb-4 flex-wrap items-center">
+        <span className="text-xs" style={{ color: 'var(--ink-soft)', padding: '6px 0' }}>quick picks:</span>
+        {[{ id: 'this-month', label: 'This month' }, { id: 'last-month', label: 'Last month' }, { id: 'last-7', label: 'Last 7 days' }, { id: 'this-quarter', label: 'This quarter' }, { id: 'all', label: 'All time' }].map(q => (
+          <button key={q.id} onClick={() => setQuickRange(q.id)} style={{ background: 'white', padding: '5px 11px', borderRadius: 999, fontSize: 11.5, border: '1px solid var(--line)', color: 'var(--ink-soft)', cursor: 'pointer', fontWeight: 500 }}>{q.label}</button>
+        ))}
+      </div>
+
+      <p className="text-xs font-semibold mb-2" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3 }}>INCLUDE IN BUNDLE</p>
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        {[
+          { id: 'tasks', label: 'Tasks', count: counts.tasks },
+          { id: 'posts', label: 'Posts published', count: counts.posts },
+          { id: 'team', label: 'Team performance', count: null },
+          { id: 'comms', label: 'Client conversations', count: counts.comms },
+          { id: 'instagram', label: 'Instagram metrics', count: counts.instagram },
+          { id: 'strategy', label: 'Strategy notes', count: counts.strategy },
+        ].map(item => {
+          const checked = includes[item.id];
+          return (
+            <button key={item.id} onClick={() => toggleInclude(item.id)} style={{ background: 'white', border: '1px solid ' + (checked ? 'var(--coral)' : 'var(--line)'), borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}>
+              <span style={{ width: 18, height: 18, borderRadius: 5, background: checked ? 'var(--coral)' : 'white', border: checked ? 'none' : '1.5px solid var(--line)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {checked && <CheckCircle2 size={10} color="white" style={{ strokeWidth: 3 }} />}
+              </span>
+              <span style={{ flex: 1, color: 'var(--ink)', fontWeight: 500 }}>{item.label}{item.count !== null ? ' (' + item.count + ')' : ''}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex gap-2">
+        <button onClick={downloadPDF} className="btn-primary" style={{ flex: 1, padding: '11px 16px', justifyContent: 'center' }}><FileText size={13} /> Download as PDF</button>
+        <button onClick={downloadExcel} style={{ flex: 1, background: 'white', color: 'var(--ink)', padding: '11px 16px', border: '1.5px solid var(--line)', borderRadius: 999, fontWeight: 500, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><FileSpreadsheet size={13} color="#5a8068" /> Download as Excel</button>
+      </div>
+      <p className="text-xs text-center mt-3" style={{ color: 'var(--ink-soft)' }}>PDF gives you a polished one-document summary · Excel gives you raw data on separate sheets</p>
     </div>
   );
 }
