@@ -174,7 +174,7 @@ const FileText = I(<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 
 const ArrowRight = I(<><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></>);
 const Sparkles = I(<><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></>);
 
-const TABLES = ['teams', 'team', 'clients', 'tasks', 'posts', 'sheets', 'strategies', 'comms', 'instagram_reports', 'notes'];
+const TABLES = ['teams', 'team', 'clients', 'tasks', 'posts', 'sheets', 'strategies', 'comms', 'instagram_reports', 'notes', 'client_briefs', 'leave_requests', 'team_messages'];
 const STATUS_COLORS = { todo: { bg: 'var(--line-soft)', text: 'var(--ink-soft)', label: 'To do' }, progress: { bg: 'var(--gold-soft)', text: '#a07a32', label: 'In progress' }, review: { bg: 'var(--lavender-soft)', text: 'var(--lavender)', label: 'Review' }, done: { bg: 'var(--sage-soft)', text: 'var(--sage)', label: 'Done' }, blocked: { bg: 'var(--pink-soft)', text: 'var(--pink)', label: 'Blocked' } };
 const PRIORITY_COLORS = { low: 'var(--muted)', medium: 'var(--gold)', high: 'var(--coral)' };
 const PLATFORMS = [
@@ -828,7 +828,7 @@ function exportCustomBundleExcel(opts) {
 }
 
 const fetchTable = async (table) => { const { data, error } = await sb.from(table).select('*'); if (error) { console.error(`fetch ${table}:`, error); return []; } return data.map(toCamel); };
-const upsertItem = async (table, item, userId) => { const { id, createdAt, ...rest } = item; const cleaned = {}; for (const [k, v] of Object.entries(rest)) { cleaned[k] = (v === '' && (k.endsWith('Id') || k === 'dueDate' || k === 'scheduledDate' || k === 'date')) ? null : v; } const payload = toSnake(cleaned); const op = id ? sb.from(table).update(payload).eq('id', id) : sb.from(table).insert({ ...payload, user_id: userId }); const { error } = await op; if (error) { console.error(`save ${table}:`, error); alert('Save failed: ' + error.message); } };
+const upsertItem = async (table, item, userId, workspaceId) => { const { id, createdAt, ...rest } = item; const cleaned = {}; for (const [k, v] of Object.entries(rest)) { cleaned[k] = (v === '' && (k.endsWith('Id') || k === 'dueDate' || k === 'scheduledDate' || k === 'date')) ? null : v; } const payload = toSnake(cleaned); const insertPayload = { ...payload, user_id: userId }; if (workspaceId) insertPayload.workspace_id = workspaceId; const op = id ? sb.from(table).update(payload).eq('id', id) : sb.from(table).insert(insertPayload); const { error } = await op; if (error) { console.error(`save ${table}:`, error); alert('Save failed: ' + error.message); } };
 const deleteItem = async (table, id) => { const { error } = await sb.from(table).delete().eq('id', id); if (error) console.error(`delete ${table}:`, error); };
 const normalizeUrl = (url) => { if (!url) return ''; const trimmed = String(url).trim(); if (!trimmed) return ''; if (/^https?:\/\//i.test(trimmed)) return trimmed; return 'https://' + trimmed; };
 
@@ -893,8 +893,13 @@ function MemberDashboard({ user, membership }) {
   const [teams, setTeams] = useState([]);
   const [clients, setClients] = useState([]);
   const [posts, setPosts] = useState([]);
+  const [briefs, setBriefs] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [teamMessages, setTeamMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [briefPeek, setBriefPeek] = useState(null);
 
   const teamMemberId = membership.teamMemberId;
   const myTeamRow = team.find(t => t.id === teamMemberId);
@@ -909,25 +914,34 @@ function MemberDashboard({ user, membership }) {
     await sb.from('workspace_members').update({ welcomed_at: new Date().toISOString() }).eq('id', membership.id);
   };
 
-  // Fetch only what members need: tasks, team, teams, clients (limited), posts
+  // Fetch
   const fetchAll = useCallback(async () => {
-    const [t, tm, tms, c, p] = await Promise.all([
+    const [t, tm, tms, c, p, b, lr, msg] = await Promise.all([
       sb.from('tasks').select('*'),
       sb.from('team').select('*'),
       sb.from('teams').select('*'),
       sb.from('clients').select('*'),
       sb.from('posts').select('*'),
+      sb.from('client_briefs').select('*'),
+      sb.from('leave_requests').select('*'),
+      sb.from('team_messages').select('*'),
     ]);
     setTasks((t.data || []).map(toCamel));
     setTeam((tm.data || []).map(toCamel));
     setTeams((tms.data || []).map(toCamel));
     setClients((c.data || []).map(toCamel));
     setPosts((p.data || []).map(toCamel));
+    setBriefs((b.data || []).map(toCamel));
+    setLeaveRequests((lr.data || []).map(toCamel));
+    setTeamMessages((msg.data || []).map(toCamel));
     setLoading(false);
   }, []);
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => {
-    const ch = sb.channel('rt-member-tasks').on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchAll()).subscribe();
+    const ch = sb.channel('rt-member').on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchAll())
+                                       .on('postgres_changes', { event: '*', schema: 'public', table: 'leave_requests' }, () => fetchAll())
+                                       .on('postgres_changes', { event: '*', schema: 'public', table: 'team_messages' }, () => fetchAll())
+                                       .subscribe();
     return () => sb.removeChannel(ch);
   }, [fetchAll]);
 
@@ -973,15 +987,38 @@ function MemberDashboard({ user, membership }) {
     );
   }
 
+  const myLeave = leaveRequests.filter(r => r.teamMemberId === teamMemberId);
+  const myMessages = teamMessages.filter(m => m.teamMemberId === teamMemberId);
+  const pendingLeave = myLeave.filter(r => r.status === 'pending').length;
+  const myBriefs = briefs.filter(b => myClients.some(c => c.id === b.clientId));
+
   const navItems = [
     { id: 'day', label: 'My day', icon: Sun },
     { id: 'tasks', label: 'My tasks', icon: CheckSquare, count: myActive.length },
     { id: 'calendar', label: 'My calendar', icon: Calendar, count: myPosts.filter(p => p.status === 'scheduled').length },
     { id: 'clients', label: 'My clients', icon: Briefcase, count: myClients.length },
+    { id: 'leave', label: 'Time off', icon: Heart, count: pendingLeave > 0 ? pendingLeave : undefined },
+    { id: 'tell', label: 'Tell admin', icon: MessageSquare },
   ];
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
+      <style>{`
+        @keyframes sunnyBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+        @keyframes sunnyRays { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+        @keyframes wave { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(15deg); } 75% { transform: rotate(-10deg); } }
+        @keyframes fadeUp { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+        @keyframes pulseDot { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.7; } }
+        @keyframes streakFlame { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        @keyframes sparkle { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.2); opacity: 1; } }
+        .sunny-bob { animation: sunnyBob 3s ease-in-out infinite; transform-origin: center; }
+        .wave-hand { animation: wave 1.5s ease-in-out 1; transform-origin: 70% 70%; display: inline-block; }
+        .stagger-fade { animation: fadeUp 0.5s ease-out backwards; }
+        .pulse-dot { animation: pulseDot 1.6s ease-in-out infinite; }
+        .streak-flame { animation: streakFlame 1.8s ease-in-out infinite; display: inline-block; }
+        .sparkle-1 { animation: sparkle 2s ease-in-out infinite; }
+        .sparkle-2 { animation: sparkle 2.2s ease-in-out infinite 0.4s; }
+      `}</style>
       <div className="flex">
         <aside style={{ width: 232, minHeight: '100vh', padding: '20px 14px', position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--line)', background: 'var(--bg-warmer)' }}>
           <div className="flex items-center gap-2 mb-6 px-2">
@@ -1000,11 +1037,12 @@ function MemberDashboard({ user, membership }) {
                 <button key={item.id} onClick={() => setView(item.id)} className={`nav-item ${active ? 'active' : ''}`}>
                   <ItemIcon size={16} />
                   <span style={{ flex: 1 }}>{item.label}</span>
-                  {item.count !== undefined && item.count > 0 && (<span style={{ background: active ? 'rgba(255,255,255,0.22)' : 'var(--line)', color: active ? 'white' : 'var(--ink-soft)', padding: '1px 7px', borderRadius: 999, fontWeight: 600, fontSize: 11 }}>{item.count}</span>)}
+                  {item.count !== undefined && item.count > 0 && (<span style={{ background: active ? 'rgba(255,255,255,0.22)' : 'var(--gold-soft)', color: active ? 'white' : '#a07a32', padding: '1px 7px', borderRadius: 999, fontWeight: 600, fontSize: 11 }}>{item.count}</span>)}
                 </button>
               );
             })}
           </nav>
+          <StreakCard myDone={myDone} />
           <div className="mt-auto pt-4">
             <div style={{ height: 1, background: 'var(--line)' }} className="mb-3"></div>
             <div className="flex items-center gap-2.5 px-2 mb-2">
@@ -1015,17 +1053,20 @@ function MemberDashboard({ user, membership }) {
           </div>
         </aside>
         <main className="flex-1 min-h-screen" style={{ padding: '32px 40px', maxWidth: 1100 }}>
-          {view === 'day' && <MemberDay displayName={displayName} myTasks={myTasks} myActive={myActive} myDone={myDone} myClients={myClients} team={team} teams={teams} clients={clients} updateTaskStatus={updateTaskStatus} setView={setView} />}
-          {view === 'tasks' && <MemberTasks myTasks={myTasks} team={team} teams={teams} clients={clients} updateTaskStatus={updateTaskStatus} />}
+          {view === 'day' && <MemberDay displayName={displayName} myTasks={myTasks} myActive={myActive} myDone={myDone} myClients={myClients} team={team} teams={teams} clients={clients} briefs={briefs} updateTaskStatus={updateTaskStatus} setView={setView} onPeekBrief={(c) => setBriefPeek(c)} />}
+          {view === 'tasks' && <MemberTasks myTasks={myTasks} team={team} teams={teams} clients={clients} briefs={briefs} updateTaskStatus={updateTaskStatus} onPeekBrief={(c) => setBriefPeek(c)} />}
           {view === 'calendar' && <MemberCalendar myPosts={myPosts} clients={clients} />}
-          {view === 'clients' && <MemberClients myClients={myClients} myTasks={myTasks} />}
+          {view === 'clients' && <MemberClients myClients={myClients} myTasks={myTasks} briefs={briefs} onPeekBrief={(c) => setBriefPeek(c)} />}
+          {view === 'leave' && <MemberLeaveView leave={myLeave} workspaceId={membership.workspaceId} teamMemberId={teamMemberId} userId={user.id} onRefresh={fetchAll} />}
+          {view === 'tell' && <MemberTellAdminView messages={myMessages} workspaceId={membership.workspaceId} teamMemberId={teamMemberId} userId={user.id} onRefresh={fetchAll} />}
         </main>
       </div>
+      {briefPeek && <BriefPeekModal client={briefPeek} brief={briefs.find(b => b.clientId === briefPeek.id)} onClose={() => setBriefPeek(null)} />}
     </div>
   );
 }
 
-function MemberDay({ displayName, myTasks, myActive, myDone, myClients, team, teams, clients, updateTaskStatus, setView }) {
+function MemberDay({ displayName, myTasks, myActive, myDone, myClients, team, teams, clients, briefs, updateTaskStatus, setView, onPeekBrief }) {
   const todayStr = today();
   const overdue = myActive.filter(t => t.dueDate && t.dueDate < todayStr);
   const dueToday = myActive.filter(t => t.dueDate === todayStr);
@@ -1033,28 +1074,68 @@ function MemberDay({ displayName, myTasks, myActive, myDone, myClients, team, te
   const doneThisWeek = myDone.filter(t => t.completedAt ? new Date(t.completedAt) >= weekAgo : false).length || myDone.filter(t => isInPeriod(t.createdAt, 'week')).length;
   const completionRate = myTasks.length > 0 ? Math.round((myDone.length / myTasks.length) * 100) : 0;
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Hey' : 'Good evening';
+  const moodForSunny = hour >= 21 || hour < 6 ? 'sleepy' : (completionRate >= 80 || dueToday.length === 0) ? 'excited' : 'happy';
   const dateText = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const focus = [...overdue, ...dueToday];
 
+  // Daily rotating quote — picks based on day of year so it stays the same all day
+  const QUOTES = [
+    "Mondays are for big ideas, Fridays are for finishing them",
+    "small steps every day add up to big things ✨",
+    "make today count — your future self will thank you",
+    "done is better than perfect (most of the time)",
+    "every great brand started with one good post",
+    "creativity loves a deadline (sorry, but true)",
+    "the work you ship today is the portfolio you have tomorrow",
+    "good vibes, good work, good day 🌻",
+    "you're allowed to take breaks — Sunny insists",
+    "be kind to yourself today, then crush it",
+    "ideas before inbox — protect your mornings",
+    "deep work for an hour beats scattered effort all day",
+    "your taste is the differentiator. trust it.",
+    "ship something. anything. today.",
+    "the best feedback comes from the work being seen",
+  ];
+  const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+  const quote = QUOTES[dayOfYear % QUOTES.length];
+
+  // Closing encouragement
+  const ENCOURAGEMENTS = [
+    "you've got this ✨",
+    "Sunny believes in you 🌻",
+    "finish 3 more today and Sunny does a happy dance ✨",
+    "deep breath. one task at a time.",
+    "small wins count. all of them.",
+  ];
+  const enc = ENCOURAGEMENTS[dayOfYear % ENCOURAGEMENTS.length];
+
   return (
     <div className="fade-in">
-      <header className="mb-6 flex items-center gap-4">
-        <Sunny size={56} mood="happy" float />
+      <header className="mb-5 flex items-center gap-4 stagger-fade" style={{ animationDelay: '0s' }}>
+        <div style={{ position: 'relative' }}>
+          <div className="sunny-bob"><Sunny size={56} mood={moodForSunny} /></div>
+          <span className="sparkle-1" style={{ position: 'absolute', top: -6, right: -4, fontSize: 14 }}>✨</span>
+          <span className="sparkle-2" style={{ position: 'absolute', bottom: -2, left: -6, fontSize: 11 }}>✨</span>
+        </div>
         <div className="flex-1">
-          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1.1rem', lineHeight: 1, marginBottom: 6 }}>{dateText}</p>
-          <h1 className="display" style={{ fontSize: '2.2rem', fontWeight: 500, lineHeight: 1.1 }}>{greeting}, {displayName}!</h1>
+          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1.1rem', lineHeight: 1, marginBottom: 4 }}>{dateText}</p>
+          <h1 className="display" style={{ fontSize: '2rem', fontWeight: 500, lineHeight: 1.1, margin: 0 }}>{greeting}, {displayName} <span className="wave-hand">👋</span></h1>
+          <p className="hand mt-2" style={{ color: 'var(--ink-soft)', fontSize: '1.05rem', lineHeight: 1.3 }}>"{quote}"</p>
         </div>
       </header>
 
       <div className="grid grid-cols-4 gap-3 mb-5">
-        <StatCard label="Due today" value={dueToday.length} sub={dueToday.length === 0 ? 'all clear' : 'go go go'} accent="var(--coral)" />
-        <StatCard label="Overdue" value={overdue.length} sub={overdue.length > 0 ? 'needs attention' : 'nothing late'} alert={overdue.length > 0 ? `${overdue.length} late` : null} accent="var(--pink)" />
-        <StatCard label="Done this week" value={doneThisWeek} sub="great work" accent="var(--sage)" />
-        <StatCard label="Completion rate" value={completionRate + '%'} sub="all-time" accent="var(--lavender)" />
+        <div className="stagger-fade" style={{ animationDelay: '0.1s' }}><StatCard label="Due today" value={dueToday.length} sub={dueToday.length === 0 ? 'all clear ✨' : 'go go go'} accent="var(--coral)" /></div>
+        <div className="stagger-fade" style={{ animationDelay: '0.15s' }}><StatCard label={overdue.length > 0 ? "Overdue 😬" : "Overdue"} value={overdue.length} sub={overdue.length > 0 ? 'needs attention' : 'nothing late'} accent="var(--pink)" /></div>
+        <div className="stagger-fade" style={{ animationDelay: '0.2s' }}><StatCard label="Done this week 🎉" value={doneThisWeek} sub="great work" accent="var(--sage)" /></div>
+        <div className="stagger-fade" style={{ animationDelay: '0.25s', position: 'relative' }}>
+          <StatCard label={completionRate >= 80 ? "Top performer ⭐" : "Completion rate"} value={completionRate + '%'} sub="all-time" accent="var(--lavender)" />
+          {completionRate >= 80 && <span className="sparkle-1" style={{ position: 'absolute', top: 6, right: 8, fontSize: 13 }}>✨</span>}
+        </div>
       </div>
 
-      <div className="card mb-4">
+      <div className="card mb-4 stagger-fade" style={{ animationDelay: '0.3s' }}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="display text-xl">On your plate today</h2>
@@ -1064,33 +1145,57 @@ function MemberDay({ displayName, myTasks, myActive, myDone, myClients, team, te
         </div>
         {focus.length === 0 ? (
           <div style={{ padding: '22px 0', textAlign: 'center' }}>
-            <Sunny size={42} mood="happy" />
+            <div className="sunny-bob"><Sunny size={42} mood="excited" /></div>
             <p className="display text-lg mt-2 mb-1">All caught up!</p>
             <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1.1rem' }}>nothing burning today ✨</p>
           </div>
         ) : (
           <div className="space-y-2">
-            {focus.map(task => <TaskRow key={task.id} task={task} team={team} teams={teams} clients={clients} compact onStatusChange={updateTaskStatus} />)}
+            {focus.map(task => {
+              const client = clients.find(c => c.id === task.clientId);
+              const brief = client ? briefs.find(b => b.clientId === client.id) : null;
+              const isOverdue = task.dueDate && task.dueDate < todayStr;
+              return (
+                <div key={task.id} className="card-hover" style={{ background: 'white', border: '1px solid var(--line)', borderLeft: isOverdue ? '3px solid var(--pink)' : '1px solid var(--line)', borderRadius: 10, padding: '10px 12px' }}>
+                  <div className="flex items-center gap-2.5 mb-1.5">
+                    <button onClick={() => updateTaskStatus(task.id, task.status === 'done' ? 'todo' : 'done')} style={{ width: 16, height: 16, borderRadius: '50%', border: '1.8px solid var(--muted)', background: 'transparent', cursor: 'pointer', flexShrink: 0, padding: 0 }} title="Mark done"></button>
+                    <p className="text-sm font-semibold flex-1 truncate" style={{ margin: 0 }}>{task.title}</p>
+                    <select value={task.status} onChange={e => updateTaskStatus(task.id, e.target.value)} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, border: '1px solid var(--line)', background: STATUS_COLORS[task.status]?.bg || 'white', color: STATUS_COLORS[task.status]?.text || 'var(--ink)' }}>
+                      <option value="todo">To do</option><option value="progress">In progress</option><option value="review">Review</option><option value="done">Done</option><option value="blocked">Blocked</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1.5" style={{ paddingLeft: 24 }}>
+                    {client && <span className="badge" style={{ background: 'var(--lavender-soft)', color: '#7d63a3', fontSize: 10 }}>{client.name}</span>}
+                    {client && brief && <button onClick={() => onPeekBrief(client)} className="badge" style={{ background: 'var(--coral-soft)', color: 'var(--coral-deep)', fontSize: 10, border: 'none', cursor: 'pointer', fontWeight: 600 }}>📖 brief</button>}
+                    {isOverdue && <span className="hand" style={{ color: 'var(--pink)', fontSize: '0.95rem' }}>eep, overdue 😅</span>}
+                    {!isOverdue && task.dueDate === todayStr && <span className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem' }}>due today</span>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
+        <p className="hand text-center mt-4" style={{ color: 'var(--coral-deep)', fontSize: '1rem' }}>{enc}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="card">
+        <div className="card stagger-fade" style={{ animationDelay: '0.35s' }}>
           <h3 className="display text-lg mb-1">My clients</h3>
           <p className="hand mb-4" style={{ color: 'var(--coral-deep)', fontSize: '1.05rem' }}>brands you're working with</p>
           {myClients.length === 0 ? <p className="text-sm py-2" style={{ color: 'var(--ink-soft)' }}>No clients assigned yet.</p> : (
             <div className="space-y-2">{myClients.slice(0, 5).map(c => {
               const taskCount = myTasks.filter(t => t.clientId === c.id && t.status !== 'done').length;
+              const brief = briefs.find(b => b.clientId === c.id);
               return <div key={c.id} className="flex items-center gap-3 p-2.5" style={{ background: 'var(--bg-warmer)', borderRadius: 10 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--coral-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--coral-deep)', fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{c.name?.[0]?.toUpperCase() || '?'}</div>
                 <p className="text-sm font-semibold flex-1 truncate">{c.name}</p>
+                {brief && <button onClick={() => onPeekBrief(c)} className="badge" style={{ background: 'var(--coral-soft)', color: 'var(--coral-deep)', fontSize: 10, border: 'none', cursor: 'pointer', fontWeight: 600 }}>📖</button>}
                 <span className="badge" style={{ background: 'var(--line-soft)', color: 'var(--ink-soft)' }}>{taskCount} active</span>
               </div>;
             })}</div>
           )}
         </div>
-        <div className="card">
+        <div className="card stagger-fade" style={{ animationDelay: '0.4s' }}>
           <h3 className="display text-lg mb-1">Recently done</h3>
           <p className="hand mb-4" style={{ color: 'var(--coral-deep)', fontSize: '1.05rem' }}>your wins ✨</p>
           {myDone.length === 0 ? <p className="text-sm py-2" style={{ color: 'var(--ink-soft)' }}>Nothing finished yet — soon!</p> : (
@@ -1109,7 +1214,68 @@ function MemberDay({ displayName, myTasks, myActive, myDone, myClients, team, te
   );
 }
 
-function MemberTasks({ myTasks, team, teams, clients, updateTaskStatus }) {
+function StreakCard({ myDone }) {
+  // Compute simple streak: number of consecutive days with at least one done task
+  const dayMap = {};
+  myDone.forEach(t => {
+    const d = (t.completedAt || t.createdAt || '').slice(0, 10);
+    if (d) dayMap[d] = true;
+  });
+  let streak = 0;
+  const cursor = new Date();
+  for (let i = 0; i < 30; i++) {
+    const d = cursor.toISOString().slice(0, 10);
+    if (dayMap[d]) streak++;
+    else if (i > 0) break;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  if (streak === 0) return null;
+  return (
+    <div style={{ marginTop: 16, padding: 10, background: 'var(--gold-soft)', border: '1px solid #f5e9c8', borderRadius: 10 }}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="streak-flame">🔥</span>
+        <p className="text-xs font-semibold" style={{ margin: 0, color: '#a07a32' }}>{streak}-day streak!</p>
+      </div>
+      <p className="hand" style={{ color: '#a07a32', fontSize: '0.85rem', margin: 0, lineHeight: 1.2 }}>don't break the chain ✨</p>
+    </div>
+  );
+}
+
+function BriefPeekModal({ client, brief, onClose }) {
+  const hasContent = brief && (brief.voice || brief.dos || brief.donts || brief.hashtags || brief.cadence);
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(58,45,45,0.3)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }} onClick={onClose}>
+      <div className="card scale-in" style={{ maxWidth: 540, width: '100%', maxHeight: '85vh', overflow: 'auto', padding: 22 }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-3 pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--coral)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Fraunces, serif', fontWeight: 500, fontSize: 17 }}>{client.name?.[0]?.toUpperCase() || '?'}</div>
+          <div className="flex-1">
+            <p className="display" style={{ fontSize: 17, fontWeight: 500, margin: 0, lineHeight: 1.1 }}>{client.name} — Brand brief</p>
+            <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', margin: '2px 0 0' }}>read this before you start ✨</p>
+          </div>
+          <span className="badge" style={{ background: 'var(--sage-soft)', color: 'var(--sage)', fontWeight: 600 }}>READ-ONLY</span>
+          <button onClick={onClose} className="btn-ghost" style={{ padding: 6 }}><X size={14} /></button>
+        </div>
+        {!hasContent ? (
+          <div style={{ padding: '20px 0', textAlign: 'center' }}>
+            <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>No brief written yet for this client.</p>
+            <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1rem', marginTop: 4 }}>ask your admin to add one ✨</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2.5">
+            {brief.voice && <BriefCard title="VOICE" icon="✏️" body={brief.voice} bg="var(--coral-soft)" />}
+            {brief.visualStyle && <BriefCard title="VISUAL STYLE" icon="🎨" body={brief.visualStyle} bg="var(--lavender-soft)" colors={brief.colorPalette} />}
+            {brief.dos && <BriefCard title="DO'S" icon="✓" body={brief.dos} bg="var(--sage-soft)" />}
+            {brief.donts && <BriefCard title="DON'TS" icon="✕" body={brief.donts} bg="var(--pink-soft)" />}
+            {brief.hashtags && <div style={{ gridColumn: 'span 2' }}><BriefCard title="HASHTAGS & MENTIONS" icon="#" body={brief.hashtags} bg="var(--gold-soft)" hashtags /></div>}
+            {brief.cadence && <div style={{ gridColumn: 'span 2' }}><BriefCard title="CADENCE & APPROVAL" icon="🕐" body={brief.cadence} bg="var(--sky-soft)" /></div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MemberTasks({ myTasks, team, teams, clients, briefs, updateTaskStatus, onPeekBrief }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
   const buckets = ['todo', 'progress', 'review', 'done', 'blocked'];
@@ -1169,7 +1335,7 @@ function MemberCalendar({ myPosts, clients }) {
   );
 }
 
-function MemberClients({ myClients, myTasks }) {
+function MemberClients({ myClients, myTasks, briefs, onPeekBrief }) {
   return (
     <div className="fade-in">
       <PageHeader title="My clients" subtitle={`${myClients.length} ${myClients.length === 1 ? 'brand' : 'brands'} you're working with`} />
@@ -1206,6 +1372,221 @@ function MemberClients({ myClients, myTasks }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function MemberLeaveView({ leave, workspaceId, teamMemberId, userId, onRefresh }) {
+  const [showForm, setShowForm] = useState(false);
+  const TYPE_STYLES = {
+    vacation: { bg: 'var(--coral-soft)', color: 'var(--coral-deep)', label: 'Vacation', emoji: '🏖️' },
+    sick: { bg: 'var(--pink-soft)', color: '#c95080', label: 'Sick', emoji: '🤒' },
+    wfh: { bg: 'var(--lavender-soft)', color: '#7d63a3', label: 'WFH', emoji: '🏠' },
+    personal: { bg: 'var(--gold-soft)', color: '#a07a32', label: 'Personal', emoji: '💼' },
+  };
+  const sorted = [...leave].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const usedDays = sorted.filter(r => r.status === 'approved' && r.type !== 'wfh').reduce((acc, r) => acc + Math.max(1, Math.round((new Date(r.endDate) - new Date(r.startDate)) / 86400000) + 1), 0);
+  const wfhDays = sorted.filter(r => r.status === 'approved' && r.type === 'wfh').reduce((acc, r) => acc + Math.max(1, Math.round((new Date(r.endDate) - new Date(r.startDate)) / 86400000) + 1), 0);
+  const allowance = 15;
+
+  const cancel = async (req) => {
+    if (!window.confirm('Cancel this request?')) return;
+    const { error } = await sb.from('leave_requests').update({ status: 'cancelled' }).eq('id', req.id);
+    if (error) { alert('Failed: ' + error.message); return; }
+    await onRefresh();
+  };
+
+  return (
+    <div className="fade-in">
+      <PageHeader title="Time off" subtitle="request leave or work from home 📅" action={!showForm && <button className="btn-primary" onClick={() => setShowForm(true)}><Plus size={13} /> New request</button>} />
+
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="card" style={{ padding: 14 }}>
+          <p className="stat-num" style={{ fontSize: '1.5rem', lineHeight: 1, margin: 0, color: 'var(--sage)' }}>{Math.max(0, allowance - usedDays)}</p>
+          <p className="text-xs" style={{ color: 'var(--ink-soft)', marginTop: 4 }}>Leave days left</p>
+        </div>
+        <div className="card" style={{ padding: 14 }}>
+          <p className="stat-num" style={{ fontSize: '1.5rem', lineHeight: 1, margin: 0, color: 'var(--coral)' }}>{usedDays}</p>
+          <p className="text-xs" style={{ color: 'var(--ink-soft)', marginTop: 4 }}>Used this year</p>
+        </div>
+        <div className="card" style={{ padding: 14 }}>
+          <p className="stat-num" style={{ fontSize: '1.5rem', lineHeight: 1, margin: 0, color: 'var(--lavender)' }}>{wfhDays}</p>
+          <p className="text-xs" style={{ color: 'var(--ink-soft)', marginTop: 4 }}>WFH days</p>
+        </div>
+      </div>
+
+      {showForm && <LeaveRequestModal workspaceId={workspaceId} teamMemberId={teamMemberId} userId={userId} onClose={() => setShowForm(false)} onDone={async () => { await onRefresh(); setShowForm(false); }} />}
+
+      <div className="card">
+        <p className="text-xs font-semibold mb-3" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3 }}>YOUR REQUESTS</p>
+        {sorted.length === 0 ? (
+          <p className="hand py-4 text-center" style={{ color: 'var(--coral-deep)', fontSize: '1.1rem' }}>nothing yet — tap "New request" to start ✨</p>
+        ) : (
+          <div className="space-y-2">
+            {sorted.map(req => {
+              const style = TYPE_STYLES[req.type] || TYPE_STYLES.vacation;
+              const days = Math.max(1, Math.round((new Date(req.endDate) - new Date(req.startDate)) / 86400000) + 1);
+              const statusBadge = {
+                pending: { bg: 'var(--gold-soft)', color: '#a07a32', label: '⏳ Pending' },
+                approved: { bg: 'var(--sage-soft)', color: 'var(--sage)', label: '✓ Approved' },
+                declined: { bg: 'var(--pink-soft)', color: 'var(--pink)', label: '✕ Declined' },
+                cancelled: { bg: 'var(--line-soft)', color: 'var(--ink-soft)', label: '○ Cancelled' },
+              }[req.status] || { bg: 'var(--line-soft)', color: 'var(--ink-soft)', label: req.status };
+              return (
+                <div key={req.id} style={{ background: 'var(--bg-warmer)', borderLeft: `3px solid ${style.color}`, borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, opacity: req.status === 'cancelled' ? 0.5 : 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p className="text-sm font-semibold" style={{ margin: 0 }}>{formatDate(req.startDate)} — {formatDate(req.endDate)} <span style={{ color: 'var(--ink-soft)', fontWeight: 400, fontSize: 11.5 }}>· {days}d · {style.emoji} {style.label}</span></p>
+                    {req.reason && <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>{req.reason}</p>}
+                    {req.decisionNote && <p className="text-xs mt-1" style={{ color: 'var(--coral-deep)', fontStyle: 'italic' }}>note: {req.decisionNote}</p>}
+                  </div>
+                  <span className="badge" style={{ background: statusBadge.bg, color: statusBadge.color, fontWeight: 600 }}>{statusBadge.label}</span>
+                  {req.status === 'pending' && <button onClick={() => cancel(req)} className="btn-ghost" style={{ fontSize: 11 }}>Cancel</button>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LeaveRequestModal({ workspaceId, teamMemberId, userId, onClose, onDone }) {
+  const [type, setType] = useState('vacation');
+  const [startDate, setStartDate] = useState(today());
+  const [endDate, setEndDate] = useState(today());
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const TYPES = [
+    { id: 'vacation', label: 'Vacation', emoji: '🏖️' },
+    { id: 'sick', label: 'Sick', emoji: '🤒' },
+    { id: 'wfh', label: 'WFH', emoji: '🏠' },
+    { id: 'personal', label: 'Personal', emoji: '💼' },
+  ];
+  const submit = async () => {
+    if (startDate > endDate) { alert('Start date must be before end date.'); return; }
+    setSaving(true);
+    const { error } = await sb.from('leave_requests').insert({
+      workspace_id: workspaceId,
+      team_member_id: teamMemberId,
+      type, start_date: startDate, end_date: endDate,
+      reason: reason.trim() || null,
+      status: 'pending',
+      created_by: userId,
+    });
+    if (error) { alert('Failed: ' + error.message); setSaving(false); return; }
+    onDone();
+  };
+  return (
+    <ModalShell title="New time off request" onClose={onClose} onSave={submit} saveLabel={saving ? 'Sending...' : 'Send request'}>
+      <p className="hand mb-3" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem' }}>your admin will get this and approve or decline ✨</p>
+      <Field label="Type">
+        <div className="flex gap-2 flex-wrap">
+          {TYPES.map(t => <button key={t.id} type="button" onClick={() => setType(t.id)} className="badge" style={{ padding: '7px 14px', borderRadius: 999, border: type === t.id ? '1.5px solid var(--coral)' : '1px solid var(--line)', background: type === t.id ? 'var(--coral-soft)' : 'white', color: type === t.id ? 'var(--coral-deep)' : 'var(--ink)', fontWeight: 500, cursor: 'pointer', fontSize: 12.5 }}>{t.emoji} {t.label}</button>)}
+        </div>
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="From"><input type="date" className="input-field" value={startDate} onChange={e => setStartDate(e.target.value)} /></Field>
+        <Field label="To"><input type="date" className="input-field" value={endDate} onChange={e => setEndDate(e.target.value)} min={startDate} /></Field>
+      </div>
+      <Field label={<span>Reason <span className="hand" style={{ color: 'var(--coral-deep)', fontWeight: 400 }}>(optional but helpful)</span></span>}>
+        <textarea className="input-field" rows={2} value={reason} onChange={e => setReason(e.target.value)} placeholder="Cousin's wedding in Jaipur..." />
+      </Field>
+    </ModalShell>
+  );
+}
+
+function MemberTellAdminView({ messages, workspaceId, teamMemberId, userId, onRefresh }) {
+  const [composing, setComposing] = useState(false);
+  const [category, setCategory] = useState('question');
+  const [body, setBody] = useState('');
+  const [urgent, setUrgent] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const CATS = [
+    { id: 'question', label: 'Question', icon: '❓' },
+    { id: 'suggestion', label: 'Suggestion', icon: '💡' },
+    { id: 'headsup', label: 'Heads-up', icon: '⚠️' },
+    { id: 'personal', label: 'Personal', icon: '💬' },
+  ];
+  const sorted = [...messages].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+  const send = async () => {
+    if (!body.trim()) return;
+    setSaving(true);
+    const { error } = await sb.from('team_messages').insert({
+      workspace_id: workspaceId,
+      team_member_id: teamMemberId,
+      category, body: body.trim(),
+      urgent,
+      status: 'new',
+      created_by: userId,
+    });
+    if (error) { alert('Failed: ' + error.message); setSaving(false); return; }
+    setBody(''); setUrgent(false); setCategory('question');
+    setSaving(false);
+    setComposing(false);
+    await onRefresh();
+  };
+
+  return (
+    <div className="fade-in">
+      <PageHeader title="Tell admin" subtitle="questions, ideas, heads-ups, anything ✨" action={!composing && <button className="btn-primary" onClick={() => setComposing(true)}><Plus size={13} /> New note</button>} />
+
+      {composing && (
+        <div className="card mb-4">
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3 }}>WHAT KIND OF NOTE?</p>
+          <div className="flex gap-2 flex-wrap mb-4">
+            {CATS.map(c => <button key={c.id} type="button" onClick={() => setCategory(c.id)} className="badge" style={{ padding: '6px 12px', borderRadius: 999, border: category === c.id ? '1.5px solid var(--coral)' : '1px solid var(--line)', background: category === c.id ? 'white' : 'var(--bg-warmer)', color: category === c.id ? 'var(--coral-deep)' : 'var(--ink-soft)', fontWeight: 500, cursor: 'pointer', fontSize: 12 }}>{c.icon} {c.label}</button>)}
+          </div>
+          <textarea className="input-field hand" rows={4} value={body} onChange={e => setBody(e.target.value)} placeholder="What's on your mind?" autoFocus style={{ fontSize: '1.05rem' }} />
+          <div className="flex items-center justify-between mt-3">
+            <label className="text-xs flex items-center gap-2" style={{ color: 'var(--ink-soft)' }}>
+              <input type="checkbox" checked={urgent} onChange={e => setUrgent(e.target.checked)} style={{ margin: 0 }} /> Mark urgent
+            </label>
+            <div className="flex gap-2">
+              <button onClick={() => { setComposing(false); setBody(''); }} className="btn-ghost" style={{ fontSize: 12 }}>Cancel</button>
+              <button onClick={send} disabled={!body.trim() || saving} className="btn-primary" style={{ padding: '7px 16px', fontSize: 12 }}>{saving ? 'Sending...' : 'Send to admin →'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <p className="text-xs font-semibold mb-3" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3 }}>YOUR PAST NOTES</p>
+        {sorted.length === 0 && !composing ? (
+          <div style={{ padding: '22px 0', textAlign: 'center' }}>
+            <Sunny size={42} mood="happy" />
+            <p className="display text-lg mt-2 mb-1">Nothing sent yet</p>
+            <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1rem' }}>tap "New note" to send your first ✨</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {sorted.map(m => {
+              const cat = CATS.find(c => c.id === m.category) || CATS[0];
+              return (
+                <div key={m.id} style={{ background: 'var(--bg-warmer)', borderRadius: 10, padding: '10px 14px' }}>
+                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                    <span style={{ fontSize: 13 }}>{cat.icon}</span>
+                    <p className="text-xs font-semibold" style={{ margin: 0 }}>{cat.label}</p>
+                    {m.urgent && <span className="badge" style={{ background: 'var(--pink)', color: 'white', fontWeight: 700, fontSize: 9 }}>URGENT</span>}
+                    <span className="text-xs" style={{ color: 'var(--muted)', marginLeft: 'auto' }}>{m.createdAt ? formatDate(m.createdAt) : 'just now'}</span>
+                    <span className="badge" style={{ background: m.status === 'replied' ? 'var(--sage-soft)' : m.status === 'read' ? 'var(--gold-soft)' : 'var(--coral-soft)', color: m.status === 'replied' ? 'var(--sage)' : m.status === 'read' ? '#a07a32' : 'var(--coral-deep)', fontWeight: 600, fontSize: 9 }}>
+                      {m.status === 'replied' ? '✓ Replied' : m.status === 'read' ? 'Read' : m.status === 'archived' ? 'Archived' : 'New'}
+                    </span>
+                  </div>
+                  <p className="text-sm" style={{ margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{m.body}</p>
+                  {m.reply && (
+                    <div style={{ background: 'white', border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px', marginTop: 8 }}>
+                      <p className="text-xs font-semibold" style={{ color: 'var(--coral-deep)' }}>Admin replied:</p>
+                      <p className="text-sm mt-1" style={{ whiteSpace: 'pre-wrap' }}>{m.reply}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1261,14 +1642,17 @@ function Dashboard({ user, membership }) {
   const [comms, setComms] = useState([]);
   const [igReports, setIgReports] = useState([]);
   const [notes, setNotes] = useState([]);
+  const [briefs, setBriefs] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [teamMessages, setTeamMessages] = useState([]);
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(true);
-  const setters = { tasks: setTasks, team: setTeam, teams: setTeams, clients: setClients, posts: setPosts, sheets: setSheets, strategies: setStrategies, comms: setComms, instagram_reports: setIgReports, notes: setNotes };
+  const setters = { tasks: setTasks, team: setTeam, teams: setTeams, clients: setClients, posts: setPosts, sheets: setSheets, strategies: setStrategies, comms: setComms, instagram_reports: setIgReports, notes: setNotes, client_briefs: setBriefs, leave_requests: setLeaveRequests, team_messages: setTeamMessages };
   const refetch = useCallback(async (table) => { const data = await fetchTable(table); setters[table]?.(data); }, []);
   useEffect(() => { (async () => { const results = await Promise.all(TABLES.map(fetchTable)); TABLES.forEach((t, i) => setters[t]?.(results[i])); setLoading(false); })(); }, [user.id]);
   useEffect(() => { if (loading) return; const seedKey = `studio:seeded:${user.id}`; if (localStorage.getItem(seedKey)) return; if (teams.length > 0) { localStorage.setItem(seedKey, '1'); return; } const payload = DEFAULT_TEAMS.map(t => ({ ...t, user_id: user.id })); sb.from('teams').insert(payload).then(({ error }) => { if (!error) { localStorage.setItem(seedKey, '1'); refetch('teams'); } }); }, [loading, teams.length, user.id, refetch]);
   useEffect(() => { const channels = TABLES.map(table => sb.channel(`rt-${table}`).on('postgres_changes', { event: '*', schema: 'public', table }, () => refetch(table)).subscribe()); return () => { channels.forEach(c => sb.removeChannel(c)); }; }, [user.id, refetch]);
-  const saveItem = async (table, item) => { await upsertItem(table, item, user.id); await refetch(table); };
+  const saveItem = async (table, item) => { await upsertItem(table, item, user.id, workspaceId); await refetch(table); };
   const removeItem = async (table, id) => { await deleteItem(table, id); await refetch(table); };
   const toggleTaskStatus = async (id, status) => { if (status === 'done') fireConfetti(); await sb.from('tasks').update({ status }).eq('id', id); await refetch('tasks'); };
   const updatePostStatus = async (id, status) => { if (status === 'published') fireConfetti(); await sb.from('posts').update({ status }).eq('id', id); await refetch('posts'); };
@@ -1277,6 +1661,8 @@ function Dashboard({ user, membership }) {
   useEffect(() => { refetchMembers(); }, []);
   useEffect(() => { const ch = sb.channel('rt-members').on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_members' }, () => refetchMembers()).subscribe(); return () => sb.removeChannel(ch); }, []);
   const pendingInvites = workspaceMembers.filter(m => m.status === 'invited').length;
+  const pendingLeave = leaveRequests.filter(l => l.status === 'pending').length;
+  const newMessages = teamMessages.filter(m => m.status === 'new').length;
 
   const logout = async () => { if (window.confirm('Sign out?')) await sb.auth.signOut(); };
 
@@ -1292,6 +1678,8 @@ function Dashboard({ user, membership }) {
   ];
   const adminNavItems = [
     { id: 'people', label: 'People', icon: UserPlus, count: pendingInvites > 0 ? pendingInvites : undefined },
+    { id: 'leave', label: 'Time off', icon: Heart, count: pendingLeave > 0 ? pendingLeave : undefined },
+    { id: 'messages', label: 'Messages', icon: MessageSquare, count: newMessages > 0 ? newMessages : undefined },
   ];
 
   if (loading) return <BootScreen />;
@@ -1346,21 +1734,24 @@ function Dashboard({ user, membership }) {
           </div>
         </aside>
         <main className="flex-1 min-h-screen" style={{ padding: '32px 40px', maxWidth: 1380 }}>
-          {view === 'dashboard' && <DashboardView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} strategies={strategies} notes={notes} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} onSaveNote={async (n) => { await saveItem('notes', n); }} onDeleteNote={async (id) => { await removeItem('notes', id); }} userEmail={user.email} />}
+          {view === 'dashboard' && <DashboardView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} strategies={strategies} notes={notes} teamMessages={teamMessages} leaveRequests={leaveRequests} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} onSaveNote={async (n) => { await saveItem('notes', n); }} onDeleteNote={async (id) => { await removeItem('notes', id); }} userEmail={user.email} userId={user.id} onRefreshMessages={() => refetch('team_messages')} />}
           {view === 'tasks' && <TasksView tasks={tasks} team={team} teams={teams} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
           {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} clients={clients} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} />}
-          {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} posts={posts} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} />}
+          {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} posts={posts} briefs={briefs} workspaceId={workspaceId} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} onEditBrief={(c) => setModal({ type: 'brief', data: { client: c, brief: briefs.find(b => b.clientId === c.id) } })} />}
           {view === 'calendar' && <CalendarView posts={posts} clients={clients} updateStatus={updatePostStatus} onAdd={() => setModal({ type: 'post' })} onEdit={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'reports' && <ReportsView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} igReports={igReports} strategies={strategies} onAddIgReport={() => setModal({ type: 'igReport' })} onImportIg={() => setModal({ type: 'igImport' })} onEditIgReport={(r) => setModal({ type: 'igReport', data: r })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'sheets' && <SheetsView sheets={sheets} onAdd={() => setModal({ type: 'sheet' })} onEdit={(s) => setModal({ type: 'sheet', data: s })} />}
           {view === 'strategy' && <StrategyView strategies={strategies} clients={clients} onAdd={() => setModal({ type: 'strategy' })} onEdit={(s) => setModal({ type: 'strategy', data: s })} />}
           {view === 'people' && <PeopleAdminView members={workspaceMembers} team={team} workspaceId={workspaceId} onInvite={() => setModal({ type: 'invite' })} onRefresh={refetchMembers} />}
+          {view === 'leave' && <LeaveAdminView requests={leaveRequests} team={team} tasks={tasks} userId={user.id} onRefresh={() => refetch('leave_requests')} />}
+          {view === 'messages' && <MessagesAdminView messages={teamMessages} team={team} userId={user.id} onRefresh={() => refetch('team_messages')} />}
         </main>
       </div>
       {modal?.type === 'task' && <TaskModal task={modal.data} team={team} clients={clients} onSave={async (t) => { await saveItem('tasks', t); const member = team.find(m => m.id === t.assigneeId); const client = clients.find(c => c.id === t.clientId); const memberTeam = member ? teams.find(tm => tm.id === member.teamId) : null; const hasPersonal = member && member.whatsapp; const hasGroup = memberTeam && memberTeam.whatsappGroup; if (hasPersonal || hasGroup) { setModal({ type: 'whatsappPrompt', task: t, member, memberTeam, client }); } else { setModal(null); } }} onDelete={modal.data ? async () => { await removeItem('tasks', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'whatsappPrompt' && <WhatsAppPrompt task={modal.task} member={modal.member} memberTeam={modal.memberTeam} client={modal.client} onClose={() => setModal(null)} />}
       {modal?.type === 'member' && <MemberModal member={modal.data} teams={teams} tasks={tasks} clients={clients} onSave={async (m) => { await saveItem('team', m); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('team', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'invite' && <InviteMemberModal team={team} teams={teams} workspaceId={workspaceId} userId={user.id} existingMembers={workspaceMembers} onClose={() => setModal(null)} onDone={async () => { await refetchMembers(); await refetch('team'); setModal(null); }} />}
+      {modal?.type === 'brief' && <BriefModal client={modal.data.client} brief={modal.data.brief} workspaceId={workspaceId} userId={user.id} onClose={() => setModal(null)} onDone={async () => { await refetch('client_briefs'); setModal(null); }} />}
       {modal?.type === 'teamFolder' && <TeamFolderModal team={modal.data} onSave={async (t) => { await saveItem('teams', t); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('teams', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'client' && <ClientModal client={modal.data} onSave={async (c) => { await saveItem('clients', c); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('clients', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'post' && <PostModal post={modal.data} clients={clients} onSave={async (p) => { await saveItem('posts', p); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('posts', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
@@ -2007,7 +2398,7 @@ function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAd
   );
 }
 
-function ClientsView({ clients, comms, tasks, posts, onAdd, onEdit, onLog }) {
+function ClientsView({ clients, comms, tasks, posts, briefs, workspaceId, onAdd, onEdit, onLog, onEditBrief }) {
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -2105,6 +2496,7 @@ function ClientsView({ clients, comms, tasks, posts, onAdd, onEdit, onLog }) {
               </div>
             )}
             {sel.notes && <div className="mb-5 p-4" style={{ background: 'var(--bg-warmer)', borderRadius: 14 }}><p className="text-xs mb-1.5" style={{ color: 'var(--ink-soft)' }}>Notes</p><p className="text-sm leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>{sel.notes}</p></div>}
+            <BriefSection client={sel} brief={(briefs || []).find(b => b.clientId === sel.id)} onEdit={() => onEditBrief && onEditBrief(sel)} />
             <div className="mb-5"><h3 className="display text-lg mb-3">Conversation log</h3>{selComms.length === 0 ? <p className="text-sm py-2" style={{ color: 'var(--ink-soft)' }}>No conversations logged yet.</p> : <div className="space-y-2.5">{selComms.map(c => <div key={c.id} className="p-3" style={{ background: 'var(--bg-warmer)', borderRadius: 12 }}><div className="flex items-center gap-2 mb-1"><span className="badge" style={{ background: 'var(--ink)', color: 'white' }}>{c.type}</span><span className="text-xs" style={{ color: 'var(--ink-soft)' }}>{formatDateTime(c.date)}</span></div><p className="text-sm leading-relaxed">{c.summary}</p></div>)}</div>}</div>
             <div><h3 className="display text-lg mb-3">Active tasks</h3>{selTasks.filter(t => t.status !== 'done').length === 0 ? <p className="text-sm py-1" style={{ color: 'var(--ink-soft)' }}>No active tasks.</p> : <div className="space-y-2">{selTasks.filter(t => t.status !== 'done').map(t => <div key={t.id} className="p-3 flex items-center justify-between" style={{ background: 'var(--bg-warmer)', borderRadius: 10 }}><p className="text-sm font-medium">{t.title}</p><span className="badge" style={{ background: STATUS_COLORS[t.status]?.bg, color: STATUS_COLORS[t.status]?.text }}>{STATUS_COLORS[t.status]?.label}</span></div>)}</div>}</div>
           </div>
@@ -2241,6 +2633,286 @@ function ClientsView({ clients, comms, tasks, posts, onAdd, onEdit, onLog }) {
         </>
       )}
     </div>
+  );
+}
+
+function BriefSection({ client, brief, onEdit }) {
+  const hasContent = brief && (brief.voice || brief.visualStyle || brief.dos || brief.donts || brief.hashtags || brief.cadence);
+  if (!hasContent) {
+    return (
+      <div className="mb-5" style={{ background: 'linear-gradient(120deg, var(--coral-soft) 0%, var(--gold-soft) 100%)', borderRadius: 14, padding: 16 }}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><FileText size={16} color="var(--coral-deep)" /></div>
+            <div>
+              <p className="display" style={{ fontSize: 15, fontWeight: 500, margin: 0, lineHeight: 1.2 }}>No brand brief yet</p>
+              <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', margin: '2px 0 0' }}>write it once, your team reads it forever ✨</p>
+            </div>
+          </div>
+          <button className="btn-primary" onClick={onEdit} style={{ padding: '6px 14px', fontSize: 12 }}><Plus size={12} /> Add brief</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="display text-lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--coral-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={13} color="var(--coral-deep)" /></span>
+          Brand brief
+        </h3>
+        <button className="btn-ghost" onClick={onEdit} style={{ fontSize: 11 }}><Edit2 size={11} /> Edit</button>
+      </div>
+      <div className="grid grid-cols-2 gap-2.5">
+        {brief.voice && <BriefCard title="VOICE" icon="✏️" body={brief.voice} bg="var(--coral-soft)" />}
+        {brief.visualStyle && <BriefCard title="VISUAL STYLE" icon="🎨" body={brief.visualStyle} bg="var(--lavender-soft)" colors={brief.colorPalette} />}
+        {brief.dos && <BriefCard title="DO'S" icon="✓" body={brief.dos} bg="var(--sage-soft)" />}
+        {brief.donts && <BriefCard title="DON'TS" icon="✕" body={brief.donts} bg="var(--pink-soft)" />}
+        {brief.hashtags && <div style={{ gridColumn: 'span 2' }}><BriefCard title="HASHTAGS & MENTIONS" icon="#" body={brief.hashtags} bg="var(--gold-soft)" hashtags /></div>}
+        {brief.cadence && <div style={{ gridColumn: 'span 2' }}><BriefCard title="CADENCE & APPROVAL" icon="🕐" body={brief.cadence} bg="var(--sky-soft)" /></div>}
+      </div>
+      {brief.updatedAt && <p className="text-xs mt-2" style={{ color: 'var(--muted)', textAlign: 'right' }}>last updated {formatDate(brief.updatedAt)}</p>}
+    </div>
+  );
+}
+
+function BriefCard({ title, icon, body, bg, colors, hashtags }) {
+  const colorList = colors ? colors.split(',').map(c => c.trim()).filter(c => /^#[0-9a-f]{3,8}$/i.test(c)) : [];
+  return (
+    <div style={{ background: bg, borderRadius: 12, padding: 14 }}>
+      <div className="flex items-center gap-1.5 mb-2">
+        <span style={{ fontSize: 11 }}>{icon}</span>
+        <p className="text-xs font-semibold" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3, margin: 0 }}>{title}</p>
+      </div>
+      {hashtags ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+          {body.split(/[\s,]+/).filter(Boolean).map((tag, i) => (
+            <span key={i} style={{ background: 'white', border: '1px solid var(--line)', padding: '3px 9px', borderRadius: 999, fontSize: 11, color: 'var(--coral-deep)', fontWeight: 500 }}>{tag}</span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm" style={{ lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>{body}</p>
+      )}
+      {colorList.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+          {colorList.map((c, i) => <span key={i} title={c} style={{ width: 22, height: 22, borderRadius: 5, background: c, border: '1px solid var(--line)' }}></span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BriefModal({ client, brief, workspaceId, userId, onClose, onDone }) {
+  const [data, setData] = useState(brief || { clientId: client.id, voice: '', visualStyle: '', colorPalette: '', dos: '', donts: '', hashtags: '', cadence: '', notes: '' });
+  const [saving, setSaving] = useState(false);
+  const update = (k, v) => setData(d => ({ ...d, [k]: v }));
+  const save = async () => {
+    setSaving(true);
+    const payload = {
+      workspace_id: workspaceId,
+      client_id: client.id,
+      voice: data.voice || null,
+      visual_style: data.visualStyle || null,
+      color_palette: data.colorPalette || null,
+      dos: data.dos || null,
+      donts: data.donts || null,
+      hashtags: data.hashtags || null,
+      cadence: data.cadence || null,
+      notes: data.notes || null,
+      updated_at: new Date().toISOString(),
+      updated_by: userId,
+    };
+    const op = brief?.id ? sb.from('client_briefs').update(payload).eq('id', brief.id) : sb.from('client_briefs').insert(payload);
+    const { error } = await op;
+    if (error) { alert('Save failed: ' + error.message); setSaving(false); return; }
+    onDone();
+  };
+  return (
+    <ModalShell title={`Brand brief — ${client.name}`} onClose={onClose} onSave={save} saveLabel={saving ? 'Saving...' : 'Save brief'} size={620}>
+      <p className="hand mb-3" style={{ color: 'var(--coral-deep)', fontSize: '1rem' }}>everything your team needs to know about this brand ✨</p>
+      <Field label="Brand voice"><textarea className="input-field" rows={2} value={data.voice} onChange={e => update('voice', e.target.value)} placeholder="Warm, slightly playful, never preachy..." /></Field>
+      <Field label="Visual style"><textarea className="input-field" rows={2} value={data.visualStyle} onChange={e => update('visualStyle', e.target.value)} placeholder="Earthy palette, lots of negative space..." /></Field>
+      <Field label={<span>Color palette <span className="hand" style={{ color: 'var(--coral-deep)', fontWeight: 400 }}>(comma-separated hex codes)</span></span>}>
+        <input className="input-field" value={data.colorPalette} onChange={e => update('colorPalette', e.target.value)} placeholder="#c97050, #f5e9c8, #6b4423" />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Do's"><textarea className="input-field" rows={4} value={data.dos} onChange={e => update('dos', e.target.value)} placeholder="Show real people&#10;Origin stories" /></Field>
+        <Field label="Don'ts"><textarea className="input-field" rows={4} value={data.donts} onChange={e => update('donts', e.target.value)} placeholder="No stock photos&#10;No salesy language" /></Field>
+      </div>
+      <Field label={<span>Hashtags & mentions <span className="hand" style={{ color: 'var(--coral-deep)', fontWeight: 400 }}>(space or comma separated)</span></span>}>
+        <input className="input-field" value={data.hashtags} onChange={e => update('hashtags', e.target.value)} placeholder="#brand #tagline @handle" />
+      </Field>
+      <Field label="Cadence & approval"><textarea className="input-field" rows={2} value={data.cadence} onChange={e => update('cadence', e.target.value)} placeholder="3 posts/week. Owner approves all reels." /></Field>
+    </ModalShell>
+  );
+}
+
+function LeaveAdminView({ requests, team, tasks, userId, onRefresh }) {
+  const [tab, setTab] = useState('pending');
+  const memberOf = (id) => team.find(t => t.id === id);
+  const TYPE_STYLES = {
+    vacation: { bg: 'var(--coral-soft)', color: 'var(--coral-deep)', label: 'VACATION' },
+    sick: { bg: 'var(--pink-soft)', color: '#c95080', label: 'SICK' },
+    wfh: { bg: 'var(--lavender-soft)', color: '#7d63a3', label: 'WFH' },
+    personal: { bg: 'var(--gold-soft)', color: '#a07a32', label: 'PERSONAL' },
+  };
+  const sorted = [...requests].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const pending = sorted.filter(r => r.status === 'pending');
+  const list = tab === 'pending' ? pending : sorted;
+
+  const decide = async (req, status) => {
+    const note = status === 'declined' ? (window.prompt('Optional note for ' + (memberOf(req.teamMemberId)?.name || 'them') + ':') || '') : '';
+    const { error } = await sb.from('leave_requests').update({ status, decided_at: new Date().toISOString(), decided_by: userId, decision_note: note || null }).eq('id', req.id);
+    if (error) { alert('Failed: ' + error.message); return; }
+    await onRefresh();
+  };
+  const tasksDuringRange = (start, end, memberId) => tasks.filter(t => t.assigneeId === memberId && t.dueDate && t.dueDate >= start && t.dueDate <= end && t.status !== 'done').length;
+
+  return (
+    <div className="fade-in">
+      <PageHeader title="Time off" subtitle={`${pending.length} ${pending.length === 1 ? 'request' : 'requests'} waiting · ${sorted.filter(r => r.status === 'approved').length} approved`} />
+
+      <div className="flex gap-2 mb-5">
+        <Pill label={`Pending (${pending.length})`} active={tab === 'pending'} onClick={() => setTab('pending')} />
+        <Pill label={`All (${sorted.length})`} active={tab === 'all'} onClick={() => setTab('all')} />
+      </div>
+
+      {list.length === 0 ? (
+        <EmptyState title="No requests" message={tab === 'pending' ? 'all caught up — nothing waiting' : 'no leave requests yet'} mood="happy" />
+      ) : (
+        <div className="space-y-2">
+          {list.map(req => {
+            const member = memberOf(req.teamMemberId);
+            const style = TYPE_STYLES[req.type] || TYPE_STYLES.vacation;
+            const days = Math.max(1, Math.round((new Date(req.endDate) - new Date(req.startDate)) / 86400000) + 1);
+            const tasksAffected = tasksDuringRange(req.startDate, req.endDate, req.teamMemberId);
+            return (
+              <div key={req.id} className="card" style={{ padding: 14 }}>
+                <div className="flex items-center gap-3 mb-2">
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--lavender-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7d63a3', fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{member?.name?.charAt(0)?.toUpperCase() || '?'}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">{member?.name || 'Unknown'} <span style={{ color: 'var(--ink-soft)', fontWeight: 400, fontSize: 11.5 }}>· {member?.role || 'team member'}</span></p>
+                    <p className="text-xs" style={{ color: 'var(--muted)' }}>requested {req.createdAt ? formatDate(req.createdAt) : 'just now'}</p>
+                  </div>
+                  <span className="badge" style={{ background: style.bg, color: style.color, fontWeight: 600 }}>{style.label} · {days}D</span>
+                </div>
+                <div style={{ background: 'var(--bg-warmer)', borderRadius: 10, padding: '8px 12px', marginBottom: 10 }}>
+                  <p className="text-sm font-medium">{formatDate(req.startDate)} — {formatDate(req.endDate)}</p>
+                  {req.reason && <p className="text-xs" style={{ color: 'var(--ink-soft)', fontStyle: 'italic', marginTop: 3 }}>"{req.reason}"</p>}
+                  {req.decisionNote && <p className="text-xs mt-1" style={{ color: 'var(--coral-deep)' }}>your note: {req.decisionNote}</p>}
+                </div>
+                {req.status === 'pending' ? (
+                  <div className="flex gap-2 items-center">
+                    <button onClick={() => decide(req, 'approved')} className="btn-primary" style={{ background: 'var(--sage)', boxShadow: '0 1.5px 0 #5a8068', padding: '6px 14px', fontSize: 12 }}><CheckCircle2 size={12} /> Approve</button>
+                    <button onClick={() => decide(req, 'declined')} className="btn-ghost" style={{ borderColor: 'var(--pink)', color: 'var(--pink)', fontSize: 12 }}>Decline</button>
+                    {tasksAffected > 0 && <span className="text-xs" style={{ color: 'var(--gold)', marginLeft: 'auto', fontWeight: 600 }}>⚠ {tasksAffected} {tasksAffected === 1 ? 'task' : 'tasks'} due in this period</span>}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="badge" style={{ background: req.status === 'approved' ? 'var(--sage-soft)' : req.status === 'declined' ? 'var(--pink-soft)' : 'var(--line-soft)', color: req.status === 'approved' ? 'var(--sage)' : req.status === 'declined' ? 'var(--pink)' : 'var(--ink-soft)', fontWeight: 600 }}>
+                      {req.status === 'approved' ? '✓ Approved' : req.status === 'declined' ? '✕ Declined' : '○ Cancelled'}
+                    </span>
+                    {req.decidedAt && <span className="text-xs" style={{ color: 'var(--muted)' }}>{formatDate(req.decidedAt)}</span>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MessagesAdminView({ messages, team, userId, onRefresh }) {
+  const [tab, setTab] = useState('new');
+  const [replying, setReplying] = useState(null);
+  const memberOf = (id) => team.find(t => t.id === id);
+  const CAT_STYLES = {
+    question: { bg: 'var(--coral-soft)', color: 'var(--coral-deep)', icon: '❓', label: 'Question' },
+    suggestion: { bg: 'var(--gold-soft)', color: '#a07a32', icon: '💡', label: 'Suggestion' },
+    headsup: { bg: 'var(--lavender-soft)', color: '#7d63a3', icon: '⚠️', label: 'Heads-up' },
+    personal: { bg: 'var(--sky-soft)', color: '#4a7591', icon: '💬', label: 'Personal' },
+  };
+  const sorted = [...messages].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const newCount = sorted.filter(m => m.status === 'new').length;
+  const list = tab === 'new' ? sorted.filter(m => m.status === 'new') : tab === 'archived' ? sorted.filter(m => m.status === 'archived') : sorted.filter(m => m.status !== 'archived');
+
+  const markRead = async (m) => { await sb.from('team_messages').update({ status: 'read' }).eq('id', m.id); await onRefresh(); };
+  const archive = async (m) => { await sb.from('team_messages').update({ status: 'archived' }).eq('id', m.id); await onRefresh(); };
+
+  return (
+    <div className="fade-in">
+      <PageHeader title="Messages from team" subtitle={`${newCount} new · ${sorted.filter(m => m.status === 'replied').length} replied`} />
+
+      <div className="flex gap-2 mb-5">
+        <Pill label={`New (${newCount})`} active={tab === 'new'} onClick={() => setTab('new')} />
+        <Pill label="All" active={tab === 'all'} onClick={() => setTab('all')} />
+        <Pill label="Archived" active={tab === 'archived'} onClick={() => setTab('archived')} />
+      </div>
+
+      {list.length === 0 ? (
+        <EmptyState title="Inbox zero" message="nothing here right now ✨" mood="happy" />
+      ) : (
+        <div className="space-y-2">
+          {list.map(m => {
+            const member = memberOf(m.teamMemberId);
+            const style = CAT_STYLES[m.category] || CAT_STYLES.question;
+            return (
+              <div key={m.id} className="card" style={{ padding: 14, borderLeft: m.status === 'new' ? '3px solid var(--coral)' : '1px solid var(--line)' }}>
+                <div className="flex items-start gap-3">
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--lavender-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7d63a3', fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{member?.name?.charAt(0)?.toUpperCase() || '?'}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <p className="text-sm font-semibold">{member?.name || 'Unknown'}</p>
+                      <span className="badge" style={{ background: style.bg, color: style.color, fontWeight: 600 }}>{style.icon} {style.label}</span>
+                      {m.urgent && <span className="badge" style={{ background: 'var(--pink)', color: 'white', fontWeight: 700 }}>URGENT</span>}
+                      <span className="text-xs" style={{ color: 'var(--muted)', marginLeft: 'auto' }}>{m.createdAt ? formatDate(m.createdAt) : 'just now'}</span>
+                    </div>
+                    <p className="text-sm mb-3" style={{ lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{m.body}</p>
+                    {m.reply && (
+                      <div style={{ background: 'var(--coral-soft)', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
+                        <p className="text-xs font-semibold" style={{ color: 'var(--coral-deep)' }}>You replied:</p>
+                        <p className="text-sm mt-1" style={{ whiteSpace: 'pre-wrap' }}>{m.reply}</p>
+                      </div>
+                    )}
+                    <div className="flex gap-2 flex-wrap">
+                      {!m.reply && <button onClick={() => setReplying(m)} className="btn-primary" style={{ padding: '5px 12px', fontSize: 11 }}><MessageSquare size={11} /> Reply</button>}
+                      {m.status === 'new' && <button onClick={() => markRead(m)} className="btn-ghost" style={{ fontSize: 11 }}>Mark read</button>}
+                      {m.status !== 'archived' && <button onClick={() => archive(m)} className="btn-ghost" style={{ fontSize: 11 }}>Archive</button>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {replying && <ReplyModal message={replying} member={memberOf(replying.teamMemberId)} userId={userId} onClose={() => setReplying(null)} onDone={async () => { await onRefresh(); setReplying(null); }} />}
+    </div>
+  );
+}
+
+function ReplyModal({ message, member, userId, onClose, onDone }) {
+  const [reply, setReply] = useState('');
+  const [saving, setSaving] = useState(false);
+  const send = async () => {
+    if (!reply.trim()) return;
+    setSaving(true);
+    const { error } = await sb.from('team_messages').update({ reply: reply.trim(), status: 'replied', replied_at: new Date().toISOString(), replied_by: userId }).eq('id', message.id);
+    if (error) { alert('Failed: ' + error.message); setSaving(false); return; }
+    onDone();
+  };
+  return (
+    <ModalShell title={`Reply to ${member?.name || 'team member'}`} onClose={onClose} onSave={send} saveLabel={saving ? 'Sending...' : 'Send reply'}>
+      <p className="hand mb-3" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem' }}>they'll see this in their dashboard ✨</p>
+      <div style={{ background: 'var(--bg-warmer)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+        <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>{member?.name} wrote:</p>
+        <p className="text-sm mt-1" style={{ fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>"{message.body}"</p>
+      </div>
+      <Field label="Your reply"><textarea className="input-field" rows={4} value={reply} onChange={e => setReply(e.target.value)} placeholder="Type your reply..." autoFocus /></Field>
+    </ModalShell>
   );
 }
 
