@@ -91,7 +91,16 @@ const { useState, useEffect, useCallback, useRef } = React;
 
 const SUPABASE_URL = 'https://zgghvwoxkkhrxfqmyyzn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnZ2h2d294a2tocnhmcW15eXpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxMjc4NjAsImV4cCI6MjA5MzcwMzg2MH0._gsNIrI4aPFghdpXDp_V1x8L6lJqJqptOzd6_zs_gjU';
-const sb = (SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY.length > 50) ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const sb = (SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY.length > 50) ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: window.localStorage,
+    storageKey: 'studio-with-sunny-auth',
+    flowType: 'pkce',
+  }
+}) : null;
 
 function Sunny({ size = 48, mood = 'happy', float: doFloat = false }) {
   const eyes = mood === 'sleepy' ? <><path d="M22 30 L28 30" stroke="#3a2d2d" strokeWidth="2" strokeLinecap="round" fill="none"/><path d="M32 30 L38 30" stroke="#3a2d2d" strokeWidth="2" strokeLinecap="round" fill="none"/></> : mood === 'excited' ? <><circle cx="25" cy="29" r="2" fill="#3a2d2d"/><circle cx="35" cy="29" r="2" fill="#3a2d2d"/><circle cx="25.5" cy="28.5" r="0.7" fill="white"/><circle cx="35.5" cy="28.5" r="0.7" fill="white"/></> : <><circle cx="25" cy="29" r="1.7" fill="#3a2d2d"/><circle cx="35" cy="29" r="1.7" fill="#3a2d2d"/></>;
@@ -3044,15 +3053,28 @@ function InviteMemberModal({ team, teams, workspaceId, userId, existingMembers, 
         if (teamErr) { alert('Could not create team member: ' + teamErr.message); setSaving(false); return; }
         teamMemberId = teamRow.id;
       }
-      const { error } = await sb.from('workspace_members').insert({
-        workspace_id: workspaceId,
-        email: cleanEmail,
-        role: 'member',
-        status: 'invited',
-        team_member_id: teamMemberId,
-        invited_at: new Date().toISOString(),
-      });
-      if (error) { alert('Invite failed: ' + error.message); setSaving(false); return; }
+      // Check if a 'removed' entry exists for this email — if so, reactivate it instead of inserting
+      const existingRemoved = (existingMembers || []).find(m => m.email?.toLowerCase() === cleanEmail && m.status === 'removed');
+      if (existingRemoved) {
+        const { error } = await sb.from('workspace_members').update({
+          status: 'invited',
+          team_member_id: teamMemberId,
+          invited_at: new Date().toISOString(),
+          user_id: null,
+          joined_at: null,
+        }).eq('id', existingRemoved.id);
+        if (error) { alert('Re-invite failed: ' + error.message); setSaving(false); return; }
+      } else {
+        const { error } = await sb.from('workspace_members').insert({
+          workspace_id: workspaceId,
+          email: cleanEmail,
+          role: 'member',
+          status: 'invited',
+          team_member_id: teamMemberId,
+          invited_at: new Date().toISOString(),
+        });
+        if (error) { alert('Invite failed: ' + error.message); setSaving(false); return; }
+      }
       onDone();
     } catch (e) {
       alert('Something went wrong: ' + e.message);
