@@ -1859,7 +1859,7 @@ function Dashboard({ user, membership }) {
   );
 }
 
-function DashboardView({ tasks, team, teams, clients, posts, comms, strategies, notes, setView, onQuickTask, onQuickPost, onSaveNote, onDeleteNote, userEmail }) {
+function DashboardView({ tasks, team, teams, clients, posts, comms, strategies, notes, leaveRequests, setView, onQuickTask, onQuickPost, onSaveNote, onDeleteNote, userEmail }) {
   const todayStr = today();
   const dueToday = tasks.filter(t => t.dueDate === todayStr && t.status !== 'done');
   const overdue = tasks.filter(t => t.dueDate && t.dueDate < todayStr && t.status !== 'done');
@@ -1894,6 +1894,8 @@ function DashboardView({ tasks, team, teams, clients, posts, comms, strategies, 
         <button className="btn-ghost" onClick={onQuickPost}><Calendar size={13} /> Schedule post</button>
         <button className="btn-ghost" onClick={() => setView('reports')}><BarChart3 size={13} /> Reports</button>
       </div>
+
+      <TodayAcrossTeam team={team} teams={teams} tasks={tasks} leaveRequests={leaveRequests || []} setView={setView} />
 
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2 card card-hover">
@@ -2087,6 +2089,111 @@ function NoteEditorTile({ editing, setEditing, onSave, onCancel, palettes }) {
         <button onClick={onCancel} style={{ padding: '5px 12px', borderRadius: 999, background: 'transparent', border: 'none', fontSize: 12, color: palette.accent, cursor: 'pointer' }}>Cancel</button>
         <button onClick={onSave} style={{ padding: '5px 14px', borderRadius: 999, background: palette.accent, color: 'white', border: 'none', fontWeight: 500, fontSize: 12, cursor: 'pointer' }}>Save</button>
       </div>
+    </div>
+  );
+}
+
+function TodayAcrossTeam({ team, teams, tasks, leaveRequests, setView }) {
+  const [filter, setFilter] = useState('all');
+  const todayStr = today();
+
+  // For each member, compute today's status
+  const memberStatus = (member) => {
+    const onLeaveToday = leaveRequests.find(r => r.teamMemberId === member.id && r.status === 'approved' && r.startDate <= todayStr && r.endDate >= todayStr);
+    if (onLeaveToday) {
+      const STYLE = {
+        vacation: { label: 'On leave', emoji: '🏖️', color: '#c97050', bg: 'var(--coral-soft)' },
+        sick: { label: 'Sick', emoji: '🤒', color: '#c95080', bg: 'var(--pink-soft)' },
+        wfh: { label: 'WFH', emoji: '🏠', color: '#7d63a3', bg: 'var(--lavender-soft)' },
+        personal: { label: 'Personal', emoji: '💼', color: '#a07a32', bg: 'var(--gold-soft)' },
+      };
+      return STYLE[onLeaveToday.type] || STYLE.vacation;
+    }
+    return { label: 'Working', emoji: '✨', color: 'var(--sage)', bg: 'var(--sage-soft)' };
+  };
+
+  const enrichedMembers = team.map(m => {
+    const mTasks = tasks.filter(t => t.assigneeId === m.id);
+    const dueToday = mTasks.filter(t => t.dueDate === todayStr && t.status !== 'done').length;
+    const overdue = mTasks.filter(t => t.dueDate && t.dueDate < todayStr && t.status !== 'done').length;
+    const doneToday = mTasks.filter(t => t.status === 'done' && t.completedAt?.slice(0, 10) === todayStr).length;
+    const inProgress = mTasks.filter(t => t.status === 'progress').length;
+    const hasUrgent = mTasks.some(t => t.priority === 'high' && t.status !== 'done');
+    const status = memberStatus(m);
+    const memberTeam = teams.find(tm => tm.id === m.teamId);
+    return { ...m, dueToday, overdue, doneToday, inProgress, hasUrgent, status, memberTeam };
+  });
+
+  const filtered = enrichedMembers.filter(m => {
+    if (filter === 'all') return true;
+    if (filter === 'working') return m.status.label === 'Working';
+    if (filter === 'away') return m.status.label !== 'Working';
+    if (filter === 'overdue') return m.overdue > 0;
+    if (filter === 'urgent') return m.hasUrgent;
+    return true;
+  });
+
+  const workingCount = enrichedMembers.filter(m => m.status.label === 'Working').length;
+  const awayCount = enrichedMembers.length - workingCount;
+  const totalDueToday = enrichedMembers.reduce((acc, m) => acc + m.dueToday, 0);
+  const totalOverdue = enrichedMembers.reduce((acc, m) => acc + m.overdue, 0);
+
+  if (team.length === 0) return null;
+
+  return (
+    <div className="card mb-7" style={{ padding: 22 }}>
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h2 className="display text-xl" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--coral-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Users size={14} color="var(--coral-deep)" /></span>
+            Today across the team
+          </h2>
+          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1.05rem', marginTop: -2, paddingLeft: 40 }}>
+            {workingCount} working · {awayCount > 0 ? awayCount + ' away · ' : ''}{totalDueToday} {totalDueToday === 1 ? 'task' : 'tasks'} due today{totalOverdue > 0 ? ' · ' + totalOverdue + ' overdue' : ''} ✨
+          </p>
+        </div>
+      </div>
+
+      <div className="flex gap-1.5 mt-3 mb-4 flex-wrap" style={{ paddingLeft: 40 }}>
+        <Pill label={`Everyone (${enrichedMembers.length})`} active={filter === 'all'} onClick={() => setFilter('all')} />
+        <Pill label={`Working (${workingCount})`} active={filter === 'working'} onClick={() => setFilter('working')} />
+        {awayCount > 0 && <Pill label={`Away (${awayCount})`} active={filter === 'away'} onClick={() => setFilter('away')} />}
+        {totalOverdue > 0 && <Pill label={`Has overdue (${enrichedMembers.filter(m => m.overdue > 0).length})`} active={filter === 'overdue'} onClick={() => setFilter('overdue')} />}
+        {enrichedMembers.some(m => m.hasUrgent) && <Pill label="Has urgent" active={filter === 'urgent'} onClick={() => setFilter('urgent')} />}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="hand py-3 text-center" style={{ color: 'var(--coral-deep)', fontSize: '1.05rem' }}>nobody in this view ✨</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {filtered.map(m => {
+            const initial = (m.name || '?').charAt(0).toUpperCase();
+            const isAway = m.status.label !== 'Working';
+            return (
+              <button key={m.id} onClick={() => setView('team')} className="card-hover" style={{ background: 'var(--bg-warmer)', border: '1px solid var(--line)', borderLeft: m.overdue > 0 ? '3px solid var(--pink)' : '1px solid var(--line)', borderRadius: 12, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, opacity: isAway ? 0.7 : 1 }}>
+                <div style={{ width: 38, height: 38, borderRadius: '50%', background: m.color || 'var(--coral-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600, fontSize: 14, flexShrink: 0, position: 'relative' }}>
+                  {initial}
+                  <span style={{ position: 'absolute', bottom: -2, right: -2, fontSize: 11, background: 'white', borderRadius: '50%', width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid var(--bg-warmer)' }}>{m.status.emoji}</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold truncate" style={{ margin: 0 }}>{m.name}</p>
+                    {m.memberTeam && <span className="text-xs" style={{ color: 'var(--muted)' }}>· {m.memberTeam.name}</span>}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                    <span className="badge" style={{ background: m.status.bg, color: m.status.color, fontWeight: 600, fontSize: 10 }}>{m.status.label}</span>
+                    {!isAway && m.dueToday > 0 && <span className="text-xs" style={{ color: 'var(--coral-deep)', fontWeight: 600 }}>{m.dueToday} due today</span>}
+                    {!isAway && m.overdue > 0 && <span className="text-xs" style={{ color: 'var(--pink)', fontWeight: 600 }}>· {m.overdue} overdue</span>}
+                    {!isAway && m.doneToday > 0 && <span className="text-xs" style={{ color: 'var(--sage)', fontWeight: 600 }}>· {m.doneToday} done</span>}
+                    {!isAway && m.dueToday === 0 && m.overdue === 0 && m.doneToday === 0 && <span className="hand" style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>nothing assigned today</span>}
+                  </div>
+                </div>
+                {m.hasUrgent && !isAway && <span title="Has high-priority work" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--pink)', flexShrink: 0 }}></span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
