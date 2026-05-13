@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#fdf8f1" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Studio" />
 <title>Studio with Sunny</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -81,6 +85,186 @@
   .stat-num { font-family: 'Fraunces', serif; font-weight: 500; letter-spacing: -0.02em; }
   .speech-bubble { position: relative; background: white; border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 14px; }
   .speech-bubble::after { content: ''; position: absolute; left: -8px; top: 14px; width: 14px; height: 14px; background: white; border-left: 1.5px solid var(--line); border-bottom: 1.5px solid var(--line); transform: rotate(45deg); }
+
+  /* ========== MOBILE FOUNDATION ========== */
+  .mobile-topbar { display: none; }
+  .mobile-tabbar { display: none; }
+  .mobile-overlay { display: none; }
+  .desktop-only { display: initial; }
+  .mobile-only { display: none; }
+
+  @media (max-width: 900px) {
+    body { font-size: 15px; }
+
+    /* Hide desktop sidebar */
+    .app-sidebar { display: none !important; }
+
+    /* Show mobile sidebar when open */
+    .app-sidebar.mobile-open {
+      display: flex !important;
+      position: fixed !important;
+      top: 0; left: 0; bottom: 0;
+      width: 80% !important;
+      max-width: 300px;
+      z-index: 200;
+      box-shadow: 4px 0 24px rgba(58, 45, 45, 0.18);
+      animation: slideInLeft 0.22s ease-out;
+    }
+    @keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+
+    /* Backdrop when sidebar open */
+    .mobile-overlay {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: rgba(58, 45, 45, 0.4);
+      backdrop-filter: blur(2px);
+      z-index: 150;
+    }
+
+    /* Mobile top bar */
+    .mobile-topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: var(--bg-warmer);
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 90;
+    }
+    .mobile-topbar .hamburger {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      background: white;
+      border: 1px solid var(--line);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .mobile-topbar .brand {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .mobile-topbar .brand p {
+      font-family: 'Fraunces', serif;
+      font-size: 17px;
+      font-weight: 600;
+      margin: 0;
+      line-height: 1;
+    }
+    .mobile-topbar .brand .hand-sub {
+      font-family: 'Caveat', cursive;
+      font-size: 0.95rem;
+      color: var(--coral-deep);
+      line-height: 1;
+      margin-top: 2px;
+    }
+
+    /* Main content padding */
+    main {
+      padding: 18px 16px !important;
+      max-width: 100% !important;
+      padding-bottom: 88px !important;
+    }
+
+    /* Mobile bottom tab bar (member only) */
+    .mobile-tabbar {
+      display: flex;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: white;
+      border-top: 1px solid var(--line);
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+      justify-content: space-around;
+      z-index: 100;
+    }
+    .mobile-tabbar .tab {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 2px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 8px;
+      min-height: 44px;
+      justify-content: center;
+      border: none;
+      background: transparent;
+    }
+    .mobile-tabbar .tab.active { color: var(--coral); }
+    .mobile-tabbar .tab .count {
+      position: absolute;
+      top: 4px;
+      right: 20%;
+      background: var(--pink);
+      color: white;
+      font-size: 9px;
+      font-weight: 700;
+      min-width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 4px;
+    }
+    .mobile-tabbar .tab-inner {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    /* Mobile-friendly: stat grids reflow */
+    .grid-cols-4 { grid-template-columns: 1fr 1fr !important; }
+    .grid-cols-3 { grid-template-columns: 1fr 1fr !important; }
+    .grid-cols-2 { grid-template-columns: 1fr !important; }
+    .col-span-2 { grid-column: span 1 !important; }
+
+    /* Modals go near full-screen */
+    .modal-shell {
+      max-width: 100% !important;
+      width: 100% !important;
+      max-height: 100vh !important;
+      height: 100vh !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+    }
+
+    /* Tap targets */
+    button, .btn-primary, .btn-ghost, .nav-item, .pill, select {
+      min-height: 38px;
+    }
+    button.tap-compact, .btn-ghost.tap-compact { min-height: auto; }
+
+    /* Bigger touch targets on form inputs */
+    .input-field { font-size: 16px !important; min-height: 42px; }
+    textarea.input-field { min-height: 80px; }
+
+    /* Hide elements marked desktop-only */
+    .desktop-only { display: none !important; }
+    .mobile-only { display: initial !important; }
+
+    /* Tighter headers on mobile */
+    h1.display, h2.display { font-size: 1.4rem !important; line-height: 1.15 !important; }
+    h2.display.text-xl { font-size: 1.2rem !important; }
+
+    /* Card padding less aggressive on phone */
+    .card { padding: 16px !important; }
+  }
+
+  @media (max-width: 480px) {
+    /* Phone-specific: single column for tighter grids */
+    .grid-cols-3 { grid-template-columns: 1fr !important; }
+  }
 </style>
 </head>
 <body>
@@ -189,12 +373,109 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB per file
 const STATUS_COLORS = { todo: { bg: 'var(--line-soft)', text: 'var(--ink-soft)', label: 'To do' }, progress: { bg: 'var(--gold-soft)', text: '#a07a32', label: 'In progress' }, review: { bg: 'var(--lavender-soft)', text: 'var(--lavender)', label: 'Review' }, done: { bg: 'var(--sage-soft)', text: 'var(--sage)', label: 'Done' }, blocked: { bg: 'var(--pink-soft)', text: 'var(--pink)', label: 'Blocked' } };
 const PRIORITY_COLORS = { low: 'var(--muted)', medium: 'var(--gold)', high: 'var(--coral)' };
 const PLATFORMS = [
-  { id: 'instagram', name: 'Instagram', icon: Instagram, color: '#e89177' },
-  { id: 'facebook', name: 'Facebook', icon: Facebook, color: '#7aa5c0' },
-  { id: 'linkedin', name: 'LinkedIn', icon: Linkedin, color: '#a994c4' },
-  { id: 'twitter', name: 'X / Twitter', icon: Twitter, color: '#3a2d2d' },
-  { id: 'youtube', name: 'YouTube', icon: Youtube, color: '#d97e9c' },
+  { id: 'instagram', name: 'Instagram', icon: Instagram, color: '#e1306c', accent: 'linear-gradient(135deg, #e84393, #fd9644)' },
+  { id: 'facebook', name: 'Facebook', icon: Facebook, color: '#4267b2', accent: '#4267b2' },
+  { id: 'linkedin', name: 'LinkedIn', icon: Linkedin, color: '#0a66c2', accent: '#0a66c2' },
+  { id: 'twitter', name: 'X / Twitter', icon: Twitter, color: '#1a1a1a', accent: '#1a1a1a' },
+  { id: 'youtube', name: 'YouTube', icon: Youtube, color: '#ff0000', accent: '#ff0000' },
+  { id: 'tiktok', name: 'TikTok', icon: Youtube, color: '#000000', accent: '#000000' },
 ];
+const POST_STATUSES = [
+  { id: 'idea', label: 'Idea', color: '#7d63a3', bg: 'var(--lavender-soft)', emoji: '💭' },
+  { id: 'shooting', label: 'Shooting', color: '#c97050', bg: 'var(--coral-soft)', emoji: '📸' },
+  { id: 'editing', label: 'Editing', color: '#a07a32', bg: 'var(--gold-soft)', emoji: '✂️' },
+  { id: 'scheduled', label: 'Scheduled', color: '#4a7591', bg: 'var(--sky-soft)', emoji: '📅' },
+  { id: 'published', label: 'Published', color: 'var(--sage)', bg: 'var(--sage-soft)', emoji: '✅' },
+];
+const postStatusOf = (s) => POST_STATUSES.find(st => st.id === s) || POST_STATUSES[0];
+
+// ====== FESTIVALS & CONTENT DAYS ======
+// Bundled dataset for 2026 & 2027. Lunar-date festivals are hardcoded for these years.
+// For 2028+, this needs a refresh.
+const FESTIVALS = [
+  // === 2026 — Indian fixed-date ===
+  { date: '2026-01-26', name: 'Republic Day', category: 'national', emoji: '🇮🇳', tone: 'patriotic' },
+  { date: '2026-08-15', name: 'Independence Day', category: 'national', emoji: '🇮🇳', tone: 'patriotic' },
+  { date: '2026-10-02', name: 'Gandhi Jayanti', category: 'national', emoji: '🕊️', tone: 'reflective' },
+  { date: '2026-04-14', name: 'Ambedkar Jayanti', category: 'national', emoji: '📚', tone: 'reflective' },
+  { date: '2026-12-25', name: 'Christmas', category: 'festival', emoji: '🎄', tone: 'celebratory' },
+  { date: '2026-01-14', name: 'Makar Sankranti / Pongal', category: 'festival', emoji: '🪁', tone: 'celebratory' },
+  { date: '2026-04-13', name: 'Baisakhi', category: 'festival', emoji: '🌾', tone: 'celebratory' },
+  // === 2026 — Indian lunar festivals (approx) ===
+  { date: '2026-03-04', name: 'Holika Dahan', category: 'festival', emoji: '🔥', tone: 'celebratory' },
+  { date: '2026-03-05', name: 'Holi', category: 'festival', emoji: '🎨', tone: 'celebratory' },
+  { date: '2026-03-19', name: 'Eid al-Fitr', category: 'festival', emoji: '🌙', tone: 'celebratory' },
+  { date: '2026-03-27', name: 'Ram Navami', category: 'festival', emoji: '🪷', tone: 'reflective' },
+  { date: '2026-04-01', name: 'Mahavir Jayanti', category: 'festival', emoji: '🕉️', tone: 'reflective' },
+  { date: '2026-04-03', name: 'Good Friday', category: 'festival', emoji: '✝️', tone: 'reflective' },
+  { date: '2026-05-26', name: 'Eid al-Adha', category: 'festival', emoji: '🌙', tone: 'celebratory' },
+  { date: '2026-08-28', name: 'Raksha Bandhan', category: 'festival', emoji: '🪢', tone: 'celebratory' },
+  { date: '2026-09-04', name: 'Janmashtami', category: 'festival', emoji: '🦚', tone: 'celebratory' },
+  { date: '2026-09-15', name: 'Ganesh Chaturthi', category: 'festival', emoji: '🐘', tone: 'celebratory' },
+  { date: '2026-09-26', name: 'Onam', category: 'festival', emoji: '🌺', tone: 'celebratory' },
+  { date: '2026-10-11', name: 'Navratri begins', category: 'festival', emoji: '💃', tone: 'celebratory' },
+  { date: '2026-10-20', name: 'Dussehra', category: 'festival', emoji: '🏹', tone: 'celebratory' },
+  { date: '2026-10-29', name: 'Karva Chauth', category: 'festival', emoji: '🌕', tone: 'celebratory' },
+  { date: '2026-11-08', name: 'Diwali', category: 'festival', emoji: '🪔', tone: 'celebratory' },
+  { date: '2026-11-10', name: 'Bhai Dooj', category: 'festival', emoji: '👫', tone: 'celebratory' },
+  { date: '2026-11-24', name: 'Guru Nanak Jayanti', category: 'festival', emoji: '🕊️', tone: 'reflective' },
+  // === 2026 — Global ===
+  { date: '2026-02-14', name: "Valentine's Day", category: 'global', emoji: '💝', tone: 'celebratory' },
+  { date: '2026-03-08', name: "International Women's Day", category: 'awareness', emoji: '🌸', tone: 'reflective' },
+  { date: '2026-03-17', name: "St Patrick's Day", category: 'global', emoji: '☘️', tone: 'celebratory' },
+  { date: '2026-04-22', name: 'Earth Day', category: 'awareness', emoji: '🌍', tone: 'reflective' },
+  { date: '2026-05-10', name: "Mother's Day", category: 'global', emoji: '💐', tone: 'celebratory' },
+  { date: '2026-06-21', name: "Father's Day", category: 'global', emoji: '👨', tone: 'celebratory' },
+  { date: '2026-10-31', name: 'Halloween', category: 'global', emoji: '🎃', tone: 'celebratory' },
+  { date: '2026-11-26', name: 'Thanksgiving (US)', category: 'global', emoji: '🦃', tone: 'celebratory' },
+  { date: '2026-11-27', name: 'Black Friday', category: 'global', emoji: '🛍️', tone: 'celebratory' },
+  // === 2026 — Awareness ===
+  { date: '2026-01-04', name: "World Braille Day", category: 'awareness', emoji: '🦮', tone: 'reflective' },
+  { date: '2026-02-04', name: 'World Cancer Day', category: 'awareness', emoji: '🎗️', tone: 'reflective' },
+  { date: '2026-03-21', name: 'World Poetry Day', category: 'awareness', emoji: '📜', tone: 'reflective' },
+  { date: '2026-03-22', name: 'World Water Day', category: 'awareness', emoji: '💧', tone: 'reflective' },
+  { date: '2026-04-07', name: 'World Health Day', category: 'awareness', emoji: '🏥', tone: 'reflective' },
+  { date: '2026-04-23', name: 'World Book Day', category: 'awareness', emoji: '📚', tone: 'celebratory' },
+  { date: '2026-05-12', name: "Nurses Day", category: 'awareness', emoji: '👩‍⚕️', tone: 'reflective' },
+  { date: '2026-06-05', name: 'World Environment Day', category: 'awareness', emoji: '🌿', tone: 'reflective' },
+  { date: '2026-06-21', name: 'Yoga Day', category: 'awareness', emoji: '🧘', tone: 'reflective' },
+  { date: '2026-07-30', name: 'Friendship Day', category: 'global', emoji: '🤝', tone: 'celebratory' },
+  { date: '2026-10-10', name: 'Mental Health Day', category: 'awareness', emoji: '💚', tone: 'reflective' },
+  { date: '2026-12-01', name: 'World AIDS Day', category: 'awareness', emoji: '🎗️', tone: 'reflective' },
+  // === 2026 — Content days ===
+  { date: '2026-02-17', name: 'Random Acts of Kindness Day', category: 'content', emoji: '💛', tone: 'celebratory' },
+  { date: '2026-03-14', name: 'Pi Day', category: 'content', emoji: '🥧', tone: 'fun' },
+  { date: '2026-04-11', name: 'National Pet Day', category: 'content', emoji: '🐾', tone: 'celebratory' },
+  { date: '2026-05-04', name: 'Star Wars Day', category: 'content', emoji: '⭐', tone: 'fun' },
+  { date: '2026-06-01', name: 'World Milk Day', category: 'content', emoji: '🥛', tone: 'fun' },
+  { date: '2026-07-07', name: 'World Chocolate Day', category: 'content', emoji: '🍫', tone: 'fun' },
+  { date: '2026-08-19', name: 'World Photography Day', category: 'content', emoji: '📸', tone: 'celebratory' },
+  { date: '2026-09-13', name: 'Programmers Day', category: 'content', emoji: '💻', tone: 'fun' },
+  { date: '2026-10-01', name: 'World Coffee Day', category: 'content', emoji: '☕', tone: 'celebratory' },
+  { date: '2026-10-04', name: 'World Animal Day', category: 'awareness', emoji: '🐾', tone: 'reflective' },
+  { date: '2026-11-13', name: 'World Kindness Day', category: 'content', emoji: '💛', tone: 'celebratory' },
+  // === 2027 — Major Indian ===
+  { date: '2027-01-26', name: 'Republic Day', category: 'national', emoji: '🇮🇳', tone: 'patriotic' },
+  { date: '2027-08-15', name: 'Independence Day', category: 'national', emoji: '🇮🇳', tone: 'patriotic' },
+  { date: '2027-10-02', name: 'Gandhi Jayanti', category: 'national', emoji: '🕊️', tone: 'reflective' },
+  { date: '2027-01-14', name: 'Makar Sankranti / Pongal', category: 'festival', emoji: '🪁', tone: 'celebratory' },
+  { date: '2027-03-22', name: 'Holi', category: 'festival', emoji: '🎨', tone: 'celebratory' },
+  { date: '2027-04-15', name: 'Ram Navami', category: 'festival', emoji: '🪷', tone: 'reflective' },
+  { date: '2027-09-25', name: 'Ganesh Chaturthi', category: 'festival', emoji: '🐘', tone: 'celebratory' },
+  { date: '2027-10-30', name: 'Dussehra', category: 'festival', emoji: '🏹', tone: 'celebratory' },
+  { date: '2027-11-28', name: 'Diwali', category: 'festival', emoji: '🪔', tone: 'celebratory' },
+  { date: '2027-12-25', name: 'Christmas', category: 'festival', emoji: '🎄', tone: 'celebratory' },
+  { date: '2027-02-14', name: "Valentine's Day", category: 'global', emoji: '💝', tone: 'celebratory' },
+  { date: '2027-03-08', name: "International Women's Day", category: 'awareness', emoji: '🌸', tone: 'reflective' },
+];
+const FESTIVAL_COLORS = {
+  national: { bg: '#fff4cc', color: '#a07a32' },
+  festival: { bg: 'var(--coral-soft)', color: 'var(--coral-deep)' },
+  global: { bg: 'var(--sky-soft)', color: '#4a7591' },
+  awareness: { bg: 'var(--lavender-soft)', color: '#7d63a3' },
+  content: { bg: 'var(--sage-soft)', color: 'var(--sage)' },
+};
+const festivalsOnDate = (dateStr) => FESTIVALS.filter(f => f.date === dateStr);
 const TEAM_COLORS = ['#e89177', '#87a690', '#a994c4', '#7aa5c0', '#d9a850', '#d97e9c', '#3a2d2d', '#9c7561'];
 const DEFAULT_TEAMS = [
   { name: 'Design', color: '#e89177', sort_order: 1 },
@@ -899,6 +1180,8 @@ function NoWorkspaceScreen({ email, onSignOut }) {
 // ====== MEMBER DASHBOARD (for non-owners) ======
 function MemberDashboard({ user, membership }) {
   const [view, setView] = useState('day');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [tabbarMore, setTabbarMore] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [team, setTeam] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -1041,8 +1324,22 @@ function MemberDashboard({ user, membership }) {
         .sparkle-1 { animation: sparkle 2s ease-in-out infinite; }
         .sparkle-2 { animation: sparkle 2.2s ease-in-out infinite 0.4s; }
       `}</style>
+      <div className="mobile-topbar">
+        <button className="hamburger" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div className="brand">
+          <Sunny size={24} />
+          <div>
+            <p>Studio</p>
+            <p className="hand-sub">with Sunny</p>
+          </div>
+        </div>
+        <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--lavender-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7d63a3', fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{(displayName || '?').charAt(0).toUpperCase()}</div>
+      </div>
+      {mobileMenuOpen && <div className="mobile-overlay" onClick={() => setMobileMenuOpen(false)}></div>}
       <div className="flex">
-        <aside style={{ width: 232, minHeight: '100vh', padding: '20px 14px', position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--line)', background: 'var(--bg-warmer)' }}>
+        <aside className={`app-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`} style={{ width: 232, minHeight: '100vh', padding: '20px 14px', position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--line)', background: 'var(--bg-warmer)' }}>
           <div className="flex items-center gap-2 mb-6 px-2">
             <Sunny size={32} />
             <div>
@@ -1056,7 +1353,7 @@ function MemberDashboard({ user, membership }) {
               const ItemIcon = item.icon;
               const active = view === item.id;
               return (
-                <button key={item.id} onClick={() => setView(item.id)} className={`nav-item ${active ? 'active' : ''}`}>
+                <button key={item.id} onClick={() => { setView(item.id); setMobileMenuOpen(false); }} className={`nav-item ${active ? 'active' : ''}`}>
                   <ItemIcon size={16} />
                   <span style={{ flex: 1 }}>{item.label}</span>
                   {item.count !== undefined && item.count > 0 && (<span style={{ background: active ? 'rgba(255,255,255,0.22)' : 'var(--gold-soft)', color: active ? 'white' : '#a07a32', padding: '1px 7px', borderRadius: 999, fontWeight: 600, fontSize: 11 }}>{item.count}</span>)}
@@ -1083,6 +1380,33 @@ function MemberDashboard({ user, membership }) {
           {view === 'tell' && <MemberTellAdminView messages={myMessages} workspaceId={membership.workspaceId} teamMemberId={teamMemberId} userId={user.id} onRefresh={fetchAll} />}
         </main>
       </div>
+      <nav className="mobile-tabbar" aria-label="Quick navigation">
+        <button className={`tab ${view === 'day' ? 'active' : ''}`} onClick={() => setView('day')}>
+          <span className="tab-inner">
+            <Sun size={18} />
+            <span>My day</span>
+          </span>
+        </button>
+        <button className={`tab ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')}>
+          <span className="tab-inner">
+            <CheckSquare size={18} />
+            <span>Tasks</span>
+            {myActive.length > 0 && <span className="count">{myActive.length}</span>}
+          </span>
+        </button>
+        <button className={`tab ${view === 'clients' ? 'active' : ''}`} onClick={() => setView('clients')}>
+          <span className="tab-inner">
+            <Briefcase size={18} />
+            <span>Clients</span>
+          </span>
+        </button>
+        <button className={`tab ${(view === 'leave' || view === 'tell' || view === 'calendar') ? 'active' : ''}`} onClick={() => setMobileMenuOpen(true)}>
+          <span className="tab-inner">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+            <span>More</span>
+          </span>
+        </button>
+      </nav>
       {briefPeek && <BriefPeekModal client={briefPeek} brief={briefs.find(b => b.clientId === briefPeek.id)} onClose={() => setBriefPeek(null)} />}
     </div>
   );
@@ -1389,30 +1713,13 @@ function MemberTasks({ myTasks, team, teams, clients, briefs, taskAtts, clientAt
 }
 
 function MemberCalendar({ myPosts, clients }) {
-  const upcoming = [...myPosts].filter(p => p.scheduledDate).sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || ''));
   return (
     <div className="fade-in">
-      <PageHeader title="My calendar" subtitle="posts & content scheduled for your clients" />
-      {upcoming.length === 0 ? (
+      <PageHeader title="My calendar" subtitle="posts scheduled for your clients ✨" />
+      {myPosts.length === 0 ? (
         <EmptyState title="Nothing scheduled" message="when your admin schedules posts for your clients, you'll see them here" mood="sleepy" />
       ) : (
-        <div className="card">
-          <div className="space-y-3">
-            {upcoming.map(p => {
-              const platform = PLATFORMS.find(pl => pl.id === p.platform);
-              const PIcon = platform?.icon || Instagram;
-              const client = clients.find(c => c.id === p.clientId);
-              return <div key={p.id} className="flex items-start gap-3 p-3" style={{ background: 'var(--bg-warmer)', borderRadius: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: platform?.color || 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><PIcon size={15} color="white" /></div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2"><p className="text-xs font-semibold" style={{ color: 'var(--ink-soft)' }}>{client?.name || '—'}</p><span className="badge" style={{ background: p.status === 'published' ? 'var(--sage-soft)' : 'var(--gold-soft)', color: p.status === 'published' ? 'var(--sage)' : '#a07a32' }}>{p.status}</span></div>
-                  <p className="text-sm leading-snug truncate mt-0.5">{p.caption || 'Untitled post'}</p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{formatDateTime(p.scheduledDate)}</p>
-                </div>
-              </div>;
-            })}
-          </div>
-        </div>
+        <ContentCalendar posts={myPosts} clients={clients} readOnly />
       )}
     </div>
   );
@@ -1737,6 +2044,7 @@ function Login() {
 function Dashboard({ user, membership }) {
   const workspaceId = membership?.workspaceId;
   const [view, setView] = useState('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [team, setTeam] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -1792,10 +2100,26 @@ function Dashboard({ user, membership }) {
 
   if (loading) return <BootScreen />;
 
+  const closeAndSetView = (v) => { setView(v); setMobileMenuOpen(false); };
+
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
+      <div className="mobile-topbar">
+        <button className="hamburger" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div className="brand">
+          <Sunny size={24} />
+          <div>
+            <p>Studio</p>
+            <p className="hand-sub">with Sunny</p>
+          </div>
+        </div>
+        <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--coral-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--coral-deep)', fontWeight: 600, fontSize: 13, flexShrink: 0 }}>{(user.email || '?').charAt(0).toUpperCase()}</div>
+      </div>
+      {mobileMenuOpen && <div className="mobile-overlay" onClick={() => setMobileMenuOpen(false)}></div>}
       <div className="flex">
-        <aside style={{ width: 232, minHeight: '100vh', padding: '20px 14px', position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--line)', background: 'var(--bg-warmer)' }}>
+        <aside className={`app-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`} style={{ width: 232, minHeight: '100vh', padding: '20px 14px', position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--line)', background: 'var(--bg-warmer)' }}>
           <div className="flex items-center gap-2 mb-7 px-2">
             <Sunny size={32} />
             <div>
@@ -1808,7 +2132,7 @@ function Dashboard({ user, membership }) {
               const ItemIcon = item.icon;
               const active = view === item.id;
               return (
-                <button key={item.id} onClick={() => setView(item.id)} className={`nav-item ${active ? 'active' : ''}`}>
+                <button key={item.id} onClick={() => closeAndSetView(item.id)} className={`nav-item ${active ? 'active' : ''}`}>
                   <ItemIcon size={16} />
                   <span style={{ flex: 1 }}>{item.label}</span>
                   {item.count !== undefined && item.count > 0 && (<span style={{ background: active ? 'rgba(255,255,255,0.22)' : 'var(--line)', color: active ? 'white' : 'var(--ink-soft)', padding: '1px 7px', borderRadius: 999, fontWeight: 600, fontSize: 11 }}>{item.count}</span>)}
@@ -1823,7 +2147,7 @@ function Dashboard({ user, membership }) {
                 const ItemIcon = item.icon;
                 const active = view === item.id;
                 return (
-                  <button key={item.id} onClick={() => setView(item.id)} className={`nav-item ${active ? 'active' : ''}`}>
+                  <button key={item.id} onClick={() => closeAndSetView(item.id)} className={`nav-item ${active ? 'active' : ''}`}>
                     <ItemIcon size={16} />
                     <span style={{ flex: 1 }}>{item.label}</span>
                     {item.count !== undefined && item.count > 0 && (<span style={{ background: active ? 'rgba(255,255,255,0.22)' : 'var(--gold-soft)', color: active ? 'white' : '#a07a32', padding: '1px 7px', borderRadius: 999, fontWeight: 600, fontSize: 11 }}>{item.count}</span>)}
@@ -1845,8 +2169,8 @@ function Dashboard({ user, membership }) {
           {view === 'dashboard' && <DashboardView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} strategies={strategies} notes={notes} teamMessages={teamMessages} leaveRequests={leaveRequests} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} onSaveNote={async (n) => { await saveItem('notes', n); }} onDeleteNote={async (id) => { await removeItem('notes', id); }} userEmail={user.email} userId={user.id} onRefreshMessages={() => refetch('team_messages')} />}
           {view === 'tasks' && <TasksView tasks={tasks} team={team} teams={teams} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
           {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} clients={clients} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} />}
-          {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} posts={posts} briefs={briefs} attachments={clientAttachments} workspaceId={workspaceId} userId={user.id} onRefreshAttachments={() => refetch('client_attachments')} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} onEditBrief={(c) => setModal({ type: 'brief', data: { client: c, brief: briefs.find(b => b.clientId === c.id) } })} />}
-          {view === 'calendar' && <CalendarView posts={posts} clients={clients} updateStatus={updatePostStatus} onAdd={() => setModal({ type: 'post' })} onEdit={(p) => setModal({ type: 'post', data: p })} />}
+          {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} posts={posts} briefs={briefs} attachments={clientAttachments} workspaceId={workspaceId} userId={user.id} onRefreshAttachments={() => refetch('client_attachments')} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} onEditBrief={(c) => setModal({ type: 'brief', data: { client: c, brief: briefs.find(b => b.clientId === c.id) } })} onAddPost={(date, clientId) => setModal({ type: 'post', data: { scheduledDate: date || '', clientId: clientId || '' } })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
+          {view === 'calendar' && <CalendarView posts={posts} clients={clients} updateStatus={updatePostStatus} onAdd={(date) => setModal({ type: 'post', data: date ? { scheduledDate: date } : undefined })} onEdit={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'reports' && <ReportsView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} igReports={igReports} strategies={strategies} onAddIgReport={() => setModal({ type: 'igReport' })} onImportIg={() => setModal({ type: 'igImport' })} onEditIgReport={(r) => setModal({ type: 'igReport', data: r })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'sheets' && <SheetsView sheets={sheets} onAdd={() => setModal({ type: 'sheet' })} onEdit={(s) => setModal({ type: 'sheet', data: s })} />}
           {view === 'strategy' && <StrategyView strategies={strategies} clients={clients} onAdd={() => setModal({ type: 'strategy' })} onEdit={(s) => setModal({ type: 'strategy', data: s })} />}
@@ -2613,13 +2937,18 @@ function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAd
   );
 }
 
-function ClientsView({ clients, comms, tasks, posts, briefs, attachments, workspaceId, userId, onRefreshAttachments, onAdd, onEdit, onLog, onEditBrief }) {
+function ClientsView({ clients, comms, tasks, posts, briefs, attachments, workspaceId, userId, onRefreshAttachments, onAdd, onEdit, onLog, onEditBrief, onAddPost, onEditPost }) {
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [clientTab, setClientTab] = useState('overview');
   const sel = clients.find(c => c.id === selected);
   const selComms = comms.filter(c => c.clientId === selected).sort((a, b) => b.date.localeCompare(a.date));
   const selTasks = tasks.filter(t => t.clientId === selected);
+  const selBrief = (briefs || []).find(b => b.clientId === selected);
+  const selAtts = (attachments || []).filter(a => a.clientId === selected);
+  // Reset tab when switching clients
+  useEffect(() => { setClientTab('overview'); }, [selected]);
 
   const PALETTES = [
     { avatar: 'var(--coral)',    glow: 'rgba(232, 145, 119, 0.25)', from: 'var(--coral-soft)',    to: 'var(--gold-soft)' },
@@ -2711,22 +3040,90 @@ function ClientsView({ clients, comms, tasks, posts, briefs, attachments, worksp
               </div>
             )}
             {sel.notes && <div className="mb-5 p-4" style={{ background: 'var(--bg-warmer)', borderRadius: 14 }}><p className="text-xs mb-1.5" style={{ color: 'var(--ink-soft)' }}>Notes</p><p className="text-sm leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>{sel.notes}</p></div>}
-            <BriefSection client={sel} brief={(briefs || []).find(b => b.clientId === sel.id)} onEdit={() => onEditBrief && onEditBrief(sel)} />
-            <div className="mb-5">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="display text-lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--gold-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Paperclip size={13} color="#a07a32" /></span>
-                    Files
-                  </h3>
-                  <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', marginTop: 2, marginLeft: 38 }}>brand guidelines, logos, assets ✨</p>
-                </div>
-                <FileUploader bucket="client-attachments" parentTable="client_attachments" parentId={sel.id} workspaceId={workspaceId} userId={userId} onUploaded={onRefreshAttachments} compact />
-              </div>
-              <AttachmentList attachments={(attachments || []).filter(a => a.clientId === sel.id)} bucket="client-attachments" canDelete onChanged={onRefreshAttachments} emptyMessage="No files yet. Upload brand guidelines, logos, or anything else your team should reference." />
+
+            <div style={{ display: 'flex', gap: 6, marginBottom: 18, flexWrap: 'wrap', borderBottom: '1px solid var(--line)', paddingBottom: 0 }}>
+              {[
+                { id: 'overview', label: 'Overview', icon: '✨' },
+                { id: 'brief', label: 'Brand brief', icon: '📖' },
+                { id: 'files', label: 'Files', count: selAtts.length, icon: '📎' },
+                { id: 'calendar', label: 'Content calendar', icon: '📅' },
+                { id: 'conversations', label: 'Conversations', count: selComms.length, icon: '💬' },
+              ].map(t => (
+                <button key={t.id} onClick={() => setClientTab(t.id)} style={{
+                  background: 'transparent', border: 'none',
+                  padding: '8px 14px', borderBottom: clientTab === t.id ? '2px solid var(--coral)' : '2px solid transparent',
+                  marginBottom: -1, color: clientTab === t.id ? 'var(--coral-deep)' : 'var(--ink-soft)',
+                  fontSize: 12.5, fontWeight: clientTab === t.id ? 600 : 500, cursor: 'pointer'
+                }}>
+                  <span style={{ marginRight: 4 }}>{t.icon}</span>{t.label}{t.count !== undefined && t.count > 0 ? ` (${t.count})` : ''}
+                </button>
+              ))}
             </div>
-            <div className="mb-5"><h3 className="display text-lg mb-3">Conversation log</h3>{selComms.length === 0 ? <p className="text-sm py-2" style={{ color: 'var(--ink-soft)' }}>No conversations logged yet.</p> : <div className="space-y-2.5">{selComms.map(c => <div key={c.id} className="p-3" style={{ background: 'var(--bg-warmer)', borderRadius: 12 }}><div className="flex items-center gap-2 mb-1"><span className="badge" style={{ background: 'var(--ink)', color: 'white' }}>{c.type}</span><span className="text-xs" style={{ color: 'var(--ink-soft)' }}>{formatDateTime(c.date)}</span></div><p className="text-sm leading-relaxed">{c.summary}</p></div>)}</div>}</div>
-            <div><h3 className="display text-lg mb-3">Active tasks</h3>{selTasks.filter(t => t.status !== 'done').length === 0 ? <p className="text-sm py-1" style={{ color: 'var(--ink-soft)' }}>No active tasks.</p> : <div className="space-y-2">{selTasks.filter(t => t.status !== 'done').map(t => <div key={t.id} className="p-3 flex items-center justify-between" style={{ background: 'var(--bg-warmer)', borderRadius: 10 }}><p className="text-sm font-medium">{t.title}</p><span className="badge" style={{ background: STATUS_COLORS[t.status]?.bg, color: STATUS_COLORS[t.status]?.text }}>{STATUS_COLORS[t.status]?.label}</span></div>)}</div>}</div>
+
+            {clientTab === 'overview' && (
+              <div>
+                <div className="mb-5">
+                  <h3 className="display text-lg mb-3">Active tasks</h3>
+                  {selTasks.filter(t => t.status !== 'done').length === 0 ? <p className="text-sm py-1" style={{ color: 'var(--ink-soft)' }}>No active tasks.</p> : <div className="space-y-2">{selTasks.filter(t => t.status !== 'done').slice(0, 5).map(t => <div key={t.id} className="p-3 flex items-center justify-between" style={{ background: 'var(--bg-warmer)', borderRadius: 10 }}><p className="text-sm font-medium">{t.title}</p><span className="badge" style={{ background: STATUS_COLORS[t.status]?.bg, color: STATUS_COLORS[t.status]?.text }}>{STATUS_COLORS[t.status]?.label}</span></div>)}</div>}
+                </div>
+                <div className="grid grid-cols-4 gap-3 mb-5">
+                  <div style={{ background: 'var(--bg-warmer)', borderRadius: 12, padding: 14 }}><p className="stat-num" style={{ fontSize: '1.5rem', lineHeight: 1, margin: 0, color: 'var(--coral)' }}>{selTasks.filter(t => t.status !== 'done').length}</p><p className="text-xs" style={{ color: 'var(--ink-soft)', marginTop: 4 }}>Active tasks</p></div>
+                  <div style={{ background: 'var(--bg-warmer)', borderRadius: 12, padding: 14 }}><p className="stat-num" style={{ fontSize: '1.5rem', lineHeight: 1, margin: 0, color: 'var(--lavender)' }}>{posts.filter(p => p.clientId === sel.id).length}</p><p className="text-xs" style={{ color: 'var(--ink-soft)', marginTop: 4 }}>Total posts</p></div>
+                  <div style={{ background: 'var(--bg-warmer)', borderRadius: 12, padding: 14 }}><p className="stat-num" style={{ fontSize: '1.5rem', lineHeight: 1, margin: 0, color: 'var(--gold)' }}>{selAtts.length}</p><p className="text-xs" style={{ color: 'var(--ink-soft)', marginTop: 4 }}>Files</p></div>
+                  <div style={{ background: 'var(--bg-warmer)', borderRadius: 12, padding: 14 }}><p className="stat-num" style={{ fontSize: '1.5rem', lineHeight: 1, margin: 0, color: 'var(--sage)' }}>{selComms.length}</p><p className="text-xs" style={{ color: 'var(--ink-soft)', marginTop: 4 }}>Conversations</p></div>
+                </div>
+                <p className="hand text-center" style={{ color: 'var(--coral-deep)', fontSize: '1.05rem' }}>tap any tab above for the full view ✨</p>
+              </div>
+            )}
+
+            {clientTab === 'brief' && (
+              <BriefSection client={sel} brief={selBrief} onEdit={() => onEditBrief && onEditBrief(sel)} />
+            )}
+
+            {clientTab === 'files' && (
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="display text-lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--gold-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Paperclip size={13} color="#a07a32" /></span>
+                      Files
+                    </h3>
+                    <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', marginTop: 2, marginLeft: 38 }}>brand guidelines, logos, assets ✨</p>
+                  </div>
+                  <FileUploader bucket="client-attachments" parentTable="client_attachments" parentId={sel.id} workspaceId={workspaceId} userId={userId} onUploaded={onRefreshAttachments} compact />
+                </div>
+                <AttachmentList attachments={selAtts} bucket="client-attachments" canDelete onChanged={onRefreshAttachments} emptyMessage="No files yet. Upload brand guidelines, logos, or anything else your team should reference." />
+              </div>
+            )}
+
+            {clientTab === 'calendar' && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="display text-lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--lavender-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Calendar size={13} color="#7d63a3" /></span>
+                      Content calendar — {sel.name}
+                    </h3>
+                    <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', marginTop: 2, marginLeft: 38 }}>just for this brand ✨</p>
+                  </div>
+                  <div className="flex gap-2">
+                    {selBrief && <button onClick={() => onEditBrief && onEditBrief(sel)} className="btn-ghost" style={{ fontSize: 12 }}>📖 Brief</button>}
+                    <button onClick={() => onAddPost && onAddPost(null, sel.id)} className="btn-primary" style={{ padding: '6px 13px', fontSize: 12 }}><Plus size={12} /> Post</button>
+                  </div>
+                </div>
+                <ContentCalendar posts={posts} clients={clients} clientFilter={sel.id} onAddPost={(date) => onAddPost && onAddPost(date, sel.id)} onEditPost={onEditPost} hideSidebar />
+              </div>
+            )}
+
+            {clientTab === 'conversations' && (
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="display text-lg">Conversation log</h3>
+                  <button onClick={() => onLog && onLog(sel)} className="btn-primary" style={{ padding: '6px 13px', fontSize: 12 }}><Plus size={12} /> Log</button>
+                </div>
+                {selComms.length === 0 ? <p className="hand py-4 text-center" style={{ color: 'var(--coral-deep)', fontSize: '1.05rem' }}>no conversations logged yet ✨</p> : <div className="space-y-2.5">{selComms.map(c => <div key={c.id} className="p-3" style={{ background: 'var(--bg-warmer)', borderRadius: 12 }}><div className="flex items-center gap-2 mb-1"><span className="badge" style={{ background: 'var(--ink)', color: 'white' }}>{c.type}</span><span className="text-xs" style={{ color: 'var(--ink-soft)' }}>{formatDateTime(c.date)}</span></div><p className="text-sm leading-relaxed">{c.summary}</p></div>)}</div>}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -3597,28 +3994,274 @@ function InviteMemberModal({ team, teams, workspaceId, userId, existingMembers, 
   );
 }
 
-function CalendarView({ posts, clients, updateStatus, onAdd, onEdit }) {
-  const [tab, setTab] = useState('upcoming');
-  const sorted = posts.slice().sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || ''));
-  const todayIso = new Date().toISOString();
-  const filtered = (() => { if (tab === 'upcoming') return sorted.filter(p => p.status === 'scheduled' && (!p.scheduledDate || p.scheduledDate >= todayIso)); if (tab === 'draft') return sorted.filter(p => p.status === 'draft'); if (tab === 'published') return sorted.filter(p => p.status === 'published').reverse(); return sorted; })();
+// ====== CONTENT CALENDAR ======
+function ContentCalendar({ posts, clients, clientFilter, onAddPost, onEditPost, onPeekBrief, hideSidebar, compact, readOnly }) {
+  const [tab, setTab] = useState('calendar');
+  const [cursorMonth, setCursorMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [expandedDay, setExpandedDay] = useState(null);
+
+  // Filter posts by client if applicable
+  const filteredPosts = clientFilter ? posts.filter(p => p.clientId === clientFilter) : posts;
+
+  // Computed month grid
+  const firstOfMonth = new Date(cursorMonth.y, cursorMonth.m, 1);
+  const daysInMonth = new Date(cursorMonth.y, cursorMonth.m + 1, 0).getDate();
+  const firstDayOfWeek = firstOfMonth.getDay(); // 0=Sun, 6=Sat
+  const todayStr = today();
+  const monthLabel = firstOfMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  // Build 6-row grid (7 cols)
+  const cells = [];
+  for (let i = 0; i < firstDayOfWeek; i++) cells.push(null); // leading blanks
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${cursorMonth.y}-${String(cursorMonth.m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    cells.push(ds);
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const postsForDate = (ds) => filteredPosts.filter(p => (p.scheduledDate || '').startsWith(ds)).sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || ''));
+
+  const prevMonth = () => setCursorMonth(c => { const nm = c.m - 1; return nm < 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: nm }; });
+  const nextMonth = () => setCursorMonth(c => { const nm = c.m + 1; return nm > 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: nm }; });
+  const goToday = () => { const d = new Date(); setCursorMonth({ y: d.getFullYear(), m: d.getMonth() }); };
+
+  // Platform counts for this month
+  const monthStart = `${cursorMonth.y}-${String(cursorMonth.m + 1).padStart(2, '0')}-01`;
+  const monthEnd = `${cursorMonth.y}-${String(cursorMonth.m + 1).padStart(2, '0')}-${daysInMonth}`;
+  const monthPosts = filteredPosts.filter(p => p.scheduledDate >= monthStart && p.scheduledDate <= monthEnd);
+  const platformStats = PLATFORMS.map(pl => {
+    const all = monthPosts.filter(p => p.platform === pl.id);
+    return { ...pl, total: all.length, published: all.filter(p => p.status === 'published').length, editing: all.filter(p => p.status === 'editing').length, shooting: all.filter(p => p.status === 'shooting').length, idea: all.filter(p => p.status === 'idea').length };
+  });
+
   return (
     <div className="fade-in">
-      <PageHeader title="Content" subtitle="your content calendar 📅" action={<button className="btn-primary" onClick={onAdd}><Plus size={14} /> Schedule post</button>} />
-      <div className="flex gap-2 mb-5">{[{ id: 'upcoming', label: 'Upcoming' }, { id: 'draft', label: 'Drafts' }, { id: 'published', label: 'Published' }, { id: 'all', label: 'All' }].map(t => <Pill key={t.id} label={t.label} active={tab === t.id} onClick={() => setTab(t.id)} />)}</div>
-      {filtered.length === 0 ? <EmptyState title="No posts here" message="schedule your first post and let the magic begin!" action={onAdd} actionLabel="Schedule post" mood="excited" /> : (
-        <div className="grid grid-cols-2 gap-3">
-          {filtered.map(p => { const platform = PLATFORMS.find(pl => pl.id === p.platform); const PIcon = platform?.icon || Instagram; const client = clients.find(c => c.id === p.clientId); const hasMetrics = p.status === 'published' && (p.likes > 0 || p.comments > 0 || p.reach > 0); return (
-            <button key={p.id} onClick={() => onEdit(p)} className="card card-hover" style={{ textAlign: 'left' }}>
-              <div className="flex items-start gap-3 mb-3"><div style={{ width: 40, height: 40, borderRadius: 12, background: platform?.color || 'var(--coral)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><PIcon size={16} color="white" /></div><div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-0.5"><p className="text-xs font-semibold">{platform?.name}</p>{client && <span className="text-xs" style={{ color: 'var(--muted)' }}>·</span>}{client && <p className="text-xs font-semibold">{client.name}</p>}</div><p className="text-xs" style={{ color: 'var(--ink-soft)' }}>{formatDateTime(p.scheduledDate)}</p></div><span className="badge" style={{ background: p.status === 'published' ? 'var(--sage-soft)' : p.status === 'draft' ? 'var(--line-soft)' : 'var(--gold-soft)', color: p.status === 'published' ? 'var(--sage)' : p.status === 'draft' ? 'var(--ink-soft)' : '#a07a32' }}>{p.status}</span></div>
-              <p className="text-sm leading-relaxed mb-3" style={{ color: 'var(--ink-soft)' }}>{p.caption?.slice(0, 180) || 'Untitled post'}{(p.caption?.length || 0) > 180 ? '...' : ''}</p>
-              {p.hashtags && <p className="text-xs mb-3 font-medium" style={{ color: platform?.color || 'var(--coral)' }}>{p.hashtags.split(' ').slice(0, 5).join(' ')}</p>}
-              {hasMetrics && <div className="flex items-center gap-4 mb-3 p-2.5" style={{ background: 'var(--bg-warmer)', borderRadius: 10 }}><div className="flex items-center gap-1 text-xs font-medium"><Heart size={11} color="var(--pink)" /> {p.likes || 0}</div><div className="flex items-center gap-1 text-xs font-medium"><MessageSquare size={11} color="var(--sky)" /> {p.comments || 0}</div><div className="flex items-center gap-1 text-xs font-medium"><Eye size={11} color="var(--lavender)" /> {p.reach || 0}</div></div>}
-              {p.status === 'scheduled' && <div className="pt-3" style={{ borderTop: '1px solid var(--line)' }}><button onClick={(e) => { e.stopPropagation(); updateStatus(p.id, 'published'); }} className="w-full text-xs font-semibold py-2" style={{ background: 'var(--sage-soft)', color: 'var(--sage)', borderRadius: 999 }}>Mark as published 🎉</button></div>}
-            </button>
-          ); })}
+      <div style={{ display: 'flex', gap: hideSidebar ? 0 : 16, alignItems: 'flex-start' }}>
+        {!hideSidebar && (
+          <aside style={{ width: 180, flexShrink: 0 }} className="cal-sidebar">
+            <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-soft)', letterSpacing: 0.4, margin: '4px 0 8px' }}>PLATFORMS</p>
+            {platformStats.map(pl => (
+              <div key={pl.id} style={{ background: 'var(--bg-warmer)', border: '1px solid var(--line)', borderRadius: 10, padding: 10, marginBottom: 6 }}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span style={{ width: 16, height: 16, borderRadius: 5, background: pl.accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><pl.icon size={9} color="white" /></span>
+                  <p className="text-xs font-semibold" style={{ margin: 0 }}>{pl.name}</p>
+                </div>
+                <div style={{ height: 3, background: 'var(--line)', borderRadius: 2, marginBottom: 5, overflow: 'hidden' }}>
+                  <div style={{ width: pl.total > 0 ? `${Math.min(100, (pl.published / pl.total) * 100)}%` : '0%', height: '100%', background: pl.color }}></div>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--muted)', margin: 0, fontSize: 10.5, lineHeight: 1.4 }}>
+                  {pl.published}p · {pl.editing}e · {pl.shooting}s · {pl.idea}i
+                </p>
+              </div>
+            ))}
+          </aside>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Compact platform strip (per-client view) */}
+          {hideSidebar && !compact && (
+            <div style={{ background: 'var(--bg-warmer)', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 12px', marginBottom: 12 }}>
+              <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3, fontSize: 10.5 }}>THIS MONTH</p>
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+                {platformStats.filter(pl => pl.total > 0).map(pl => (
+                  <div key={pl.id} className="flex items-center gap-1.5">
+                    <span style={{ width: 14, height: 14, borderRadius: 4, background: pl.accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><pl.icon size={8} color="white" /></span>
+                    <p className="text-xs" style={{ margin: 0 }}><strong>{pl.name}</strong> <span style={{ color: 'var(--muted)' }}>· {pl.total}</span></p>
+                  </div>
+                ))}
+                {platformStats.every(pl => pl.total === 0) && <p className="hand text-xs" style={{ color: 'var(--coral-deep)', margin: 0 }}>no posts this month — start planning ✨</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Tabs + month nav */}
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <Pill label="📅 Calendar" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
+            <Pill label="List" active={tab === 'list'} onClick={() => setTab('list')} />
+            <Pill label="By status" active={tab === 'status'} onClick={() => setTab('status')} />
+            <Pill label="Ideas" active={tab === 'ideas'} onClick={() => setTab('ideas')} />
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}>
+              <button onClick={prevMonth} className="btn-ghost" style={{ padding: 6, minHeight: 'auto' }}><ChevronLeft size={12} /></button>
+              <button onClick={goToday} className="btn-ghost" style={{ fontSize: 11, minHeight: 'auto' }}>Today</button>
+              <button onClick={nextMonth} className="btn-ghost" style={{ padding: 6, minHeight: 'auto' }}><ChevronRight size={12} /></button>
+            </div>
+          </div>
+
+          {tab === 'calendar' && (
+            <>
+              <p className="display" style={{ fontSize: '1.1rem', fontWeight: 500, margin: '0 0 8px' }}>{monthLabel}</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, marginBottom: 4 }}>
+                {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => <div key={d} style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', letterSpacing: 0.4, padding: '0 4px' }}>{d}</div>)}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+                {cells.map((ds, i) => {
+                  if (!ds) return <div key={i} style={{ minHeight: 90 }}></div>;
+                  const dayPosts = postsForDate(ds);
+                  const fests = festivalsOnDate(ds);
+                  const isToday = ds === todayStr;
+                  const hasFest = fests.length > 0;
+                  return (
+                    <DayCell key={i} dateStr={ds} dayNum={parseInt(ds.split('-')[2], 10)} posts={dayPosts} festivals={fests} isToday={isToday} hasFest={hasFest} clients={clients} clientFilter={clientFilter} onEditPost={onEditPost} onAddPost={() => onAddPost && onAddPost(ds)} onExpandDay={() => setExpandedDay({ ds, posts: dayPosts, festivals: fests })} readOnly={readOnly} />
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {tab !== 'calendar' && (
+            <PostListView posts={filteredPosts} clients={clients} tab={tab} onEditPost={onEditPost} clientFilter={clientFilter} readOnly={readOnly} />
+          )}
         </div>
+      </div>
+
+      {expandedDay && <DayDetailModal day={expandedDay} clients={clients} clientFilter={clientFilter} onClose={() => setExpandedDay(null)} onEditPost={onEditPost} onAddPost={onAddPost} readOnly={readOnly} />}
+    </div>
+  );
+}
+
+function DayCell({ dateStr, dayNum, posts, festivals, isToday, hasFest, clients, clientFilter, onEditPost, onAddPost, onExpandDay, readOnly }) {
+  const MAX_VISIBLE = 3;
+  const extras = posts.length - MAX_VISIBLE;
+  const festBg = hasFest ? FESTIVAL_COLORS[festivals[0].category] : null;
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget && !readOnly && onAddPost) onAddPost(); }}
+      style={{
+        background: hasFest ? `linear-gradient(135deg, var(--bg-warmer) 0%, ${festBg.bg} 100%)` : 'var(--bg-warmer)',
+        border: isToday ? '1.5px solid var(--coral)' : (hasFest ? `0.5px solid ${festBg.color}33` : '0.5px solid var(--line)'),
+        borderRadius: 8,
+        padding: 5,
+        minHeight: 90,
+        cursor: readOnly ? 'default' : 'pointer',
+        position: 'relative',
+      }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+        <p style={{ fontSize: 11, fontWeight: isToday ? 600 : 500, margin: 0, color: isToday ? 'var(--coral)' : 'var(--ink)' }}>{dayNum}</p>
+        {isToday && <span style={{ background: 'var(--coral)', color: 'white', fontSize: 7, fontWeight: 700, padding: '1px 4px', borderRadius: 999, letterSpacing: 0.3 }}>TODAY</span>}
+      </div>
+      {festivals.slice(0, 1).map((f, i) => (
+        <p key={i} title={f.name} style={{ fontSize: 9, fontWeight: 600, color: FESTIVAL_COLORS[f.category].color, background: 'white', borderRadius: 3, padding: '1px 4px', margin: '0 0 3px', display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.emoji} {f.name}</p>
+      ))}
+      {posts.slice(0, MAX_VISIBLE).map(p => {
+        const platform = PLATFORMS.find(pl => pl.id === p.platform) || PLATFORMS[0];
+        const status = postStatusOf(p.status);
+        const client = clients.find(c => c.id === p.clientId);
+        const label = p.title || p.caption?.slice(0, 22) || 'Untitled';
+        return (
+          <button key={p.id} onClick={(e) => { e.stopPropagation(); onEditPost && onEditPost(p); }}
+            style={{
+              background: 'white', border: '0.5px solid var(--line)', borderLeft: `2.5px solid ${platform.color}`,
+              borderRadius: 3, padding: '2px 5px', margin: '0 0 2px', width: '100%', textAlign: 'left', cursor: readOnly ? 'default' : 'pointer', display: 'block', overflow: 'hidden'
+            }}>
+            <p style={{ fontSize: 9, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</p>
+            <p style={{ fontSize: 8, color: status.color, margin: 0, fontWeight: 500 }}>● {status.label}{!clientFilter && client ? ' · ' + client.name.slice(0, 8) : ''}</p>
+          </button>
+        );
+      })}
+      {extras > 0 && (
+        <button onClick={(e) => { e.stopPropagation(); onExpandDay && onExpandDay(); }}
+          style={{ background: 'transparent', border: 'none', color: 'var(--coral-deep)', fontSize: 9, fontWeight: 600, cursor: 'pointer', padding: '2px 4px', textAlign: 'left', width: '100%' }}>
+          +{extras} more
+        </button>
       )}
+    </div>
+  );
+}
+
+function DayDetailModal({ day, clients, clientFilter, onClose, onEditPost, onAddPost, readOnly }) {
+  const d = new Date(day.ds);
+  const heading = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(58,45,45,0.3)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }} onClick={onClose}>
+      <div className="card scale-in" style={{ maxWidth: 520, width: '100%', maxHeight: '85vh', overflow: 'auto', padding: 22 }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4 pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
+          <div>
+            <h2 className="display text-lg" style={{ margin: 0 }}>{heading}</h2>
+            <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', margin: '2px 0 0' }}>{day.posts.length} {day.posts.length === 1 ? 'post' : 'posts'} this day ✨</p>
+          </div>
+          <button onClick={onClose} className="btn-ghost" style={{ padding: 6 }}><X size={14} /></button>
+        </div>
+        {day.festivals.length > 0 && (
+          <div className="mb-4">
+            {day.festivals.map((f, i) => (
+              <span key={i} className="badge" style={{ background: FESTIVAL_COLORS[f.category].bg, color: FESTIVAL_COLORS[f.category].color, fontWeight: 600, marginRight: 6 }}>{f.emoji} {f.name}</span>
+            ))}
+          </div>
+        )}
+        <div className="space-y-2">
+          {day.posts.map(p => {
+            const platform = PLATFORMS.find(pl => pl.id === p.platform) || PLATFORMS[0];
+            const status = postStatusOf(p.status);
+            const client = clients.find(c => c.id === p.clientId);
+            return (
+              <button key={p.id} onClick={() => { onEditPost && onEditPost(p); onClose(); }} style={{ background: 'var(--bg-warmer)', border: '1px solid var(--line)', borderLeft: `3px solid ${platform.color}`, borderRadius: 10, padding: 12, width: '100%', textAlign: 'left', cursor: readOnly ? 'default' : 'pointer' }}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span style={{ width: 18, height: 18, borderRadius: 5, background: platform.accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><platform.icon size={10} color="white" /></span>
+                  <p className="text-sm font-semibold flex-1" style={{ margin: 0 }}>{p.title || p.caption?.slice(0, 50) || 'Untitled'}</p>
+                  <span className="badge" style={{ background: status.bg, color: status.color, fontWeight: 600 }}>{status.emoji} {status.label}</span>
+                </div>
+                {!clientFilter && client && <p className="text-xs" style={{ color: 'var(--ink-soft)', margin: 0 }}>{client.name}</p>}
+                {p.caption && <p className="text-xs" style={{ color: 'var(--ink-soft)', margin: '4px 0 0', lineHeight: 1.4 }}>{p.caption.slice(0, 100)}{p.caption.length > 100 ? '...' : ''}</p>}
+              </button>
+            );
+          })}
+        </div>
+        {!readOnly && onAddPost && (
+          <button onClick={() => { onAddPost(day.ds); onClose(); }} className="btn-primary mt-4" style={{ width: '100%' }}><Plus size={13} /> Add post for this day</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PostListView({ posts, clients, tab, onEditPost, clientFilter, readOnly }) {
+  let filtered = posts;
+  if (tab === 'ideas') filtered = posts.filter(p => p.status === 'idea');
+  filtered = filtered.slice().sort((a, b) => (b.scheduledDate || '').localeCompare(a.scheduledDate || ''));
+  if (filtered.length === 0) return <p className="hand py-6 text-center" style={{ color: 'var(--coral-deep)', fontSize: '1.05rem' }}>nothing in this view ✨</p>;
+  if (tab === 'status') {
+    return (
+      <div className="space-y-4">
+        {POST_STATUSES.map(s => {
+          const items = filtered.filter(p => p.status === s.id);
+          if (items.length === 0) return null;
+          return (
+            <div key={s.id}>
+              <p className="text-xs font-semibold mb-2" style={{ color: s.color, letterSpacing: 0.3 }}>{s.emoji} {s.label.toUpperCase()} ({items.length})</p>
+              <div className="space-y-2">{items.map(p => <PostListRow key={p.id} post={p} clients={clients} onEditPost={onEditPost} clientFilter={clientFilter} readOnly={readOnly} />)}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return <div className="space-y-2">{filtered.map(p => <PostListRow key={p.id} post={p} clients={clients} onEditPost={onEditPost} clientFilter={clientFilter} readOnly={readOnly} />)}</div>;
+}
+
+function PostListRow({ post, clients, onEditPost, clientFilter, readOnly }) {
+  const platform = PLATFORMS.find(pl => pl.id === post.platform) || PLATFORMS[0];
+  const status = postStatusOf(post.status);
+  const client = clients.find(c => c.id === post.clientId);
+  return (
+    <button onClick={() => onEditPost && onEditPost(post)} className="card-hover" style={{ background: 'white', border: '1px solid var(--line)', borderLeft: `3px solid ${platform.color}`, borderRadius: 10, padding: '10px 14px', width: '100%', textAlign: 'left', cursor: readOnly ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ width: 28, height: 28, borderRadius: 8, background: platform.accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><platform.icon size={13} color="white" /></span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold truncate" style={{ margin: 0 }}>{post.title || post.caption?.slice(0, 50) || 'Untitled'}</p>
+          {!clientFilter && client && <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>· {client.name}</span>}
+        </div>
+        <p className="text-xs" style={{ color: 'var(--muted)', margin: '2px 0 0' }}>{post.scheduledDate ? formatDate(post.scheduledDate) : 'No date'}</p>
+      </div>
+      <span className="badge" style={{ background: status.bg, color: status.color, fontWeight: 600 }}>{status.emoji} {status.label}</span>
+    </button>
+  );
+}
+
+function CalendarView({ posts, clients, updateStatus, onAdd, onEdit }) {
+  const handleAddOnDate = (ds) => { onAdd && onAdd(ds); };
+  return (
+    <div className="fade-in">
+      <PageHeader title="Content" subtitle="your content calendar 📅" action={<button className="btn-primary" onClick={() => onAdd && onAdd()}><Plus size={14} /> New post</button>} />
+      <ContentCalendar posts={posts} clients={clients} onAddPost={handleAddOnDate} onEditPost={onEdit} />
     </div>
   );
 }
@@ -3915,7 +4558,7 @@ function ModalShell({ title, onClose, onDelete, children, onSave, saveLabel = 'S
   const handleSave = async () => { setSaving(true); try { await onSave(); } finally { setSaving(false); } };
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(58, 45, 45, 0.4)' }} onClick={onClose}>
-      <div className="scale-in scroll-area" style={{ background: 'var(--card)', borderRadius: 18, width: '100%', maxWidth: size, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(58, 45, 45, 0.2)' }} onClick={e => e.stopPropagation()}>
+      <div className="scale-in scroll-area modal-shell" style={{ background: 'var(--card)', borderRadius: 18, width: '100%', maxWidth: size, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(58, 45, 45, 0.2)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between" style={{ padding: '18px 22px', borderBottom: '1px solid var(--line)' }}><h2 className="display text-lg">{title}</h2><button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bg-warmer)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-soft)' }}><X size={16} /></button></div>
         <div style={{ padding: 22 }}>{children}</div>
         <div className="flex items-center justify-between" style={{ padding: '16px 22px', borderTop: '1px solid var(--line)' }}>
@@ -4034,14 +4677,15 @@ function ClientModal({ client, onSave, onDelete, onClose }) {
   </ModalShell>);
 }
 function PostModal({ post, clients, onSave, onDelete, onClose }) {
-  const [data, setData] = useState(post ? { ...post, scheduledDate: post.scheduledDate ? new Date(post.scheduledDate).toISOString().slice(0, 16) : '' } : { caption: '', platform: 'instagram', clientId: '', scheduledDate: '', status: 'scheduled', hashtags: '', notes: '', likes: 0, comments: 0, reach: 0, saves: 0, shares: 0 });
+  const [data, setData] = useState(post ? { ...post, scheduledDate: post.scheduledDate ? new Date(post.scheduledDate).toISOString().slice(0, 16) : '' } : { title: '', caption: '', platform: 'instagram', clientId: '', scheduledDate: '', status: 'idea', hashtags: '', notes: '', likes: 0, comments: 0, reach: 0, saves: 0, shares: 0 });
   const update = (k, v) => setData({ ...data, [k]: v });
   const updateNum = (k, v) => setData({ ...data, [k]: v === '' ? 0 : parseInt(v, 10) || 0 });
-  return (<ModalShell title={post ? 'Edit post' : 'Schedule post'} onClose={onClose} onDelete={onDelete} onSave={() => onSave(data)}>
+  return (<ModalShell title={post ? 'Edit post' : 'New post'} onClose={onClose} onDelete={onDelete} onSave={() => onSave(data)}>
+    <Field label="Post title"><input className="input-field" value={data.title || ''} onChange={e => update('title', e.target.value)} placeholder="e.g. Aurora carousel — spring launch" /></Field>
     <div className="grid grid-cols-2 gap-3"><Field label="Client"><select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}><option value="">Select client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field><Field label="Platform"><select className="input-field" value={data.platform} onChange={e => update('platform', e.target.value)}>{PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
-    <Field label="Caption"><textarea className="input-field" rows={5} value={data.caption || ''} onChange={e => update('caption', e.target.value)} placeholder="Write your caption..." /></Field>
+    <div className="grid grid-cols-2 gap-3"><Field label="Schedule for"><input type="datetime-local" className="input-field" value={data.scheduledDate || ''} onChange={e => update('scheduledDate', e.target.value)} /></Field><Field label="Status"><select className="input-field" value={data.status} onChange={e => update('status', e.target.value)}>{POST_STATUSES.map(s => <option key={s.id} value={s.id}>{s.emoji} {s.label}</option>)}</select></Field></div>
+    <Field label="Caption"><textarea className="input-field" rows={4} value={data.caption || ''} onChange={e => update('caption', e.target.value)} placeholder="Write your caption..." /></Field>
     <Field label="Hashtags"><textarea className="input-field" rows={2} value={data.hashtags || ''} onChange={e => update('hashtags', e.target.value)} placeholder="#brand #marketing" /></Field>
-    <div className="grid grid-cols-2 gap-3"><Field label="Schedule for"><input type="datetime-local" className="input-field" value={data.scheduledDate || ''} onChange={e => update('scheduledDate', e.target.value)} /></Field><Field label="Status"><select className="input-field" value={data.status} onChange={e => update('status', e.target.value)}><option value="draft">Draft</option><option value="scheduled">Scheduled</option><option value="published">Published</option></select></Field></div>
     {data.status === 'published' && <div className="p-4 mt-2" style={{ background: 'var(--bg-warmer)', borderRadius: 14, border: '1px solid var(--line)' }}><p className="text-xs font-semibold mb-3" style={{ color: 'var(--ink-soft)' }}>Performance metrics ✨</p><div className="grid grid-cols-3 gap-2"><Field label="Likes"><input type="number" min="0" className="input-field" value={data.likes || 0} onChange={e => updateNum('likes', e.target.value)} /></Field><Field label="Comments"><input type="number" min="0" className="input-field" value={data.comments || 0} onChange={e => updateNum('comments', e.target.value)} /></Field><Field label="Reach"><input type="number" min="0" className="input-field" value={data.reach || 0} onChange={e => updateNum('reach', e.target.value)} /></Field><Field label="Saves"><input type="number" min="0" className="input-field" value={data.saves || 0} onChange={e => updateNum('saves', e.target.value)} /></Field><Field label="Shares"><input type="number" min="0" className="input-field" value={data.shares || 0} onChange={e => updateNum('shares', e.target.value)} /></Field></div></div>}
     <div className="mt-2"><Field label="Notes"><textarea className="input-field" rows={2} value={data.notes || ''} onChange={e => update('notes', e.target.value)} placeholder="Asset links, references..." /></Field></div>
   </ModalShell>);
