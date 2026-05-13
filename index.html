@@ -179,11 +179,13 @@ const Heart = I(<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.7
 const Eye = I(<><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></>);
 const Upload = I(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></>);
 const Download = I(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></>);
+const Paperclip = I(<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.93 8.8L9.41 17.41a2 2 0 0 1-2.83-2.83l8.49-8.48"/>);
 const FileText = I(<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></>);
 const ArrowRight = I(<><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></>);
 const Sparkles = I(<><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></>);
 
-const TABLES = ['teams', 'team', 'clients', 'tasks', 'posts', 'sheets', 'strategies', 'comms', 'instagram_reports', 'notes', 'client_briefs', 'leave_requests', 'team_messages'];
+const TABLES = ['teams', 'team', 'clients', 'tasks', 'posts', 'sheets', 'strategies', 'comms', 'instagram_reports', 'notes', 'client_briefs', 'leave_requests', 'team_messages', 'task_attachments', 'client_attachments'];
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB per file
 const STATUS_COLORS = { todo: { bg: 'var(--line-soft)', text: 'var(--ink-soft)', label: 'To do' }, progress: { bg: 'var(--gold-soft)', text: '#a07a32', label: 'In progress' }, review: { bg: 'var(--lavender-soft)', text: 'var(--lavender)', label: 'Review' }, done: { bg: 'var(--sage-soft)', text: 'var(--sage)', label: 'Done' }, blocked: { bg: 'var(--pink-soft)', text: 'var(--pink)', label: 'Blocked' } };
 const PRIORITY_COLORS = { low: 'var(--muted)', medium: 'var(--gold)', high: 'var(--coral)' };
 const PLATFORMS = [
@@ -923,9 +925,12 @@ function MemberDashboard({ user, membership }) {
     await sb.from('workspace_members').update({ welcomed_at: new Date().toISOString() }).eq('id', membership.id);
   };
 
+  const [taskAtts, setTaskAtts] = useState([]);
+  const [clientAtts, setClientAtts] = useState([]);
+
   // Fetch
   const fetchAll = useCallback(async () => {
-    const [t, tm, tms, c, p, b, lr, msg] = await Promise.all([
+    const [t, tm, tms, c, p, b, lr, msg, ta, ca] = await Promise.all([
       sb.from('tasks').select('*'),
       sb.from('team').select('*'),
       sb.from('teams').select('*'),
@@ -934,6 +939,8 @@ function MemberDashboard({ user, membership }) {
       sb.from('client_briefs').select('*'),
       sb.from('leave_requests').select('*'),
       sb.from('team_messages').select('*'),
+      sb.from('task_attachments').select('*'),
+      sb.from('client_attachments').select('*'),
     ]);
     setTasks((t.data || []).map(toCamel));
     setTeam((tm.data || []).map(toCamel));
@@ -943,6 +950,8 @@ function MemberDashboard({ user, membership }) {
     setBriefs((b.data || []).map(toCamel));
     setLeaveRequests((lr.data || []).map(toCamel));
     setTeamMessages((msg.data || []).map(toCamel));
+    setTaskAtts((ta.data || []).map(toCamel));
+    setClientAtts((ca.data || []).map(toCamel));
     setLoading(false);
   }, []);
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -1063,9 +1072,9 @@ function MemberDashboard({ user, membership }) {
         </aside>
         <main className="flex-1 min-h-screen" style={{ padding: '32px 40px', maxWidth: 1100 }}>
           {view === 'day' && <MemberDay displayName={displayName} myTasks={myTasks} myActive={myActive} myDone={myDone} myClients={myClients} team={team} teams={teams} clients={clients} briefs={briefs} updateTaskStatus={updateTaskStatus} setView={setView} onPeekBrief={(c) => setBriefPeek(c)} />}
-          {view === 'tasks' && <MemberTasks myTasks={myTasks} team={team} teams={teams} clients={clients} briefs={briefs} updateTaskStatus={updateTaskStatus} onPeekBrief={(c) => setBriefPeek(c)} />}
+          {view === 'tasks' && <MemberTasks myTasks={myTasks} team={team} teams={teams} clients={clients} briefs={briefs} taskAtts={taskAtts} clientAtts={clientAtts} updateTaskStatus={updateTaskStatus} onPeekBrief={(c) => setBriefPeek(c)} />}
           {view === 'calendar' && <MemberCalendar myPosts={myPosts} clients={clients} />}
-          {view === 'clients' && <MemberClients myClients={myClients} myTasks={myTasks} briefs={briefs} onPeekBrief={(c) => setBriefPeek(c)} />}
+          {view === 'clients' && <MemberClients myClients={myClients} myTasks={myTasks} briefs={briefs} clientAtts={clientAtts} onPeekBrief={(c) => setBriefPeek(c)} />}
           {view === 'leave' && <MemberLeaveView leave={myLeave} workspaceId={membership.workspaceId} teamMemberId={teamMemberId} userId={user.id} onRefresh={fetchAll} />}
           {view === 'tell' && <MemberTellAdminView messages={myMessages} workspaceId={membership.workspaceId} teamMemberId={teamMemberId} userId={user.id} onRefresh={fetchAll} />}
         </main>
@@ -1284,14 +1293,16 @@ function BriefPeekModal({ client, brief, onClose }) {
   );
 }
 
-function MemberTasks({ myTasks, team, teams, clients, briefs, updateTaskStatus, onPeekBrief }) {
+function MemberTasks({ myTasks, team, teams, clients, briefs, taskAtts, clientAtts, updateTaskStatus, onPeekBrief }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState({});
   const buckets = ['todo', 'progress', 'review', 'done', 'blocked'];
   const filtered = myTasks
     .filter(t => statusFilter === 'all' || t.status === statusFilter)
     .filter(t => !search || t.title?.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => { const o = { high: 0, medium: 1, low: 2 }; return (o[a.priority] || 1) - (o[b.priority] || 1); });
+  const toggleExpand = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
   return (
     <div className="fade-in">
       <PageHeader title="My tasks" subtitle={`${myTasks.filter(t => t.status !== 'done').length} active · ${myTasks.filter(t => t.status === 'done').length} done`} />
@@ -1304,11 +1315,62 @@ function MemberTasks({ myTasks, team, teams, clients, briefs, updateTaskStatus, 
         <EmptyState title="No tasks here" message="when your admin assigns you something, it'll show up here" mood="sleepy" />
       ) : (
         <div className="space-y-2">
-          {filtered.map(t => <TaskRow key={t.id} task={t} team={team} teams={teams} clients={clients} onClick={() => {}} onStatusChange={updateTaskStatus} />)}
+          {filtered.map(t => {
+            const taskFiles = (taskAtts || []).filter(a => a.taskId === t.id);
+            const client = clients.find(c => c.id === t.clientId);
+            const clientFiles = client ? (clientAtts || []).filter(a => a.clientId === client.id) : [];
+            const brief = client ? briefs.find(b => b.clientId === client.id) : null;
+            const hasExtras = taskFiles.length > 0 || clientFiles.length > 0 || t.description;
+            const isExpanded = expanded[t.id];
+            return (
+              <div key={t.id}>
+                <TaskRow task={t} team={team} teams={teams} clients={clients} onClick={hasExtras ? () => toggleExpand(t.id) : null} onStatusChange={updateTaskStatus} />
+                {hasExtras && (
+                  <div style={{ marginTop: -4, marginBottom: 6, marginLeft: 26 }}>
+                    <button onClick={() => toggleExpand(t.id)} className="btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }}>
+                      {isExpanded ? '▼ Hide details' : '▶ '}
+                      {!isExpanded && (
+                        <span>
+                          {t.description ? '📝 details' : ''}
+                          {taskFiles.length > 0 && <span style={{ marginLeft: t.description ? 8 : 0 }}>📎 {taskFiles.length}</span>}
+                          {client && brief && <span style={{ marginLeft: 8 }}>📖 brief</span>}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                )}
+                {isExpanded && (
+                  <div style={{ background: 'var(--bg-warmer)', border: '1px solid var(--line)', borderRadius: 12, padding: 14, marginTop: -4, marginBottom: 8, marginLeft: 26 }}>
+                    {t.description && (
+                      <div style={{ marginBottom: 12 }}>
+                        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3 }}>DESCRIPTION</p>
+                        <p className="text-sm" style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap', margin: 0 }}>{t.description}</p>
+                      </div>
+                    )}
+                    {taskFiles.length > 0 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3 }}>FILES FOR THIS TASK</p>
+                        <AttachmentList attachments={taskFiles} bucket="task-attachments" canDelete={false} />
+                      </div>
+                    )}
+                    {client && clientFiles.length > 0 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3 }}>{client.name?.toUpperCase()} BRAND FILES</p>
+                        <AttachmentList attachments={clientFiles} bucket="client-attachments" canDelete={false} />
+                      </div>
+                    )}
+                    {client && brief && (
+                      <button onClick={() => onPeekBrief(client)} className="btn-primary" style={{ padding: '6px 12px', fontSize: 11 }}>📖 View brand brief</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
       <div style={{ background: 'var(--bg-warmer)', borderRadius: 12, padding: 14, marginTop: 16, fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.5 }}>
-        <strong style={{ color: 'var(--ink)' }}>Tip:</strong> Click the status badge or circle on a task to mark it done. Your admin sees changes instantly. ✨
+        <strong style={{ color: 'var(--ink)' }}>Tip:</strong> Click any task with 📎 or 📝 to see attached files, description, and brand brief. ✨
       </div>
     </div>
   );
@@ -1344,7 +1406,8 @@ function MemberCalendar({ myPosts, clients }) {
   );
 }
 
-function MemberClients({ myClients, myTasks, briefs, onPeekBrief }) {
+function MemberClients({ myClients, myTasks, briefs, clientAtts, onPeekBrief }) {
+  const [filesPeek, setFilesPeek] = useState(null);
   return (
     <div className="fade-in">
       <PageHeader title="My clients" subtitle={`${myClients.length} ${myClients.length === 1 ? 'brand' : 'brands'} you're working with`} />
@@ -1356,6 +1419,8 @@ function MemberClients({ myClients, myTasks, briefs, onPeekBrief }) {
             const tasks = myTasks.filter(t => t.clientId === c.id);
             const active = tasks.filter(t => t.status !== 'done').length;
             const done = tasks.filter(t => t.status === 'done').length;
+            const cFiles = (clientAtts || []).filter(a => a.clientId === c.id);
+            const cBrief = (briefs || []).find(b => b.clientId === c.id);
             return (
               <div key={c.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ height: 50, background: 'linear-gradient(135deg, var(--coral-soft) 0%, var(--gold-soft) 100%)' }}></div>
@@ -1367,20 +1432,39 @@ function MemberClients({ myClients, myTasks, briefs, onPeekBrief }) {
                     <span><strong style={{ color: 'var(--coral-deep)', fontFamily: 'Fraunces, serif', fontSize: 14 }}>{active}</strong> active</span>
                     <span><strong style={{ color: 'var(--sage)', fontFamily: 'Fraunces, serif', fontSize: 14 }}>{done}</strong> done</span>
                   </div>
-                  {(c.instagram || c.facebook || c.linkedin || c.website) && (
-                    <div style={{ display: 'flex', gap: 5, marginTop: 10 }}>
-                      {c.instagram && <a href={c.instagram} target="_blank" rel="noopener noreferrer" title="Instagram" style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--coral-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}><Instagram size={12} color="var(--coral-deep)" /></a>}
-                      {c.facebook && <a href={c.facebook} target="_blank" rel="noopener noreferrer" title="Facebook" style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--sky-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}><Facebook size={12} color="#4a7591" /></a>}
-                      {c.linkedin && <a href={c.linkedin} target="_blank" rel="noopener noreferrer" title="LinkedIn" style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--lavender-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}><Linkedin size={12} color="#7d63a3" /></a>}
-                      {c.website && <a href={c.website} target="_blank" rel="noopener noreferrer" title="Website" style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--line-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}><ExternalLink size={12} color="var(--ink-soft)" /></a>}
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
+                    {cBrief && <button onClick={() => onPeekBrief(c)} className="badge" style={{ background: 'var(--coral-soft)', color: 'var(--coral-deep)', fontWeight: 600, fontSize: 10.5, border: 'none', cursor: 'pointer' }}>📖 brief</button>}
+                    {cFiles.length > 0 && <button onClick={() => setFilesPeek(c)} className="badge" style={{ background: 'var(--gold-soft)', color: '#a07a32', fontWeight: 600, fontSize: 10.5, border: 'none', cursor: 'pointer' }}>📎 {cFiles.length} {cFiles.length === 1 ? 'file' : 'files'}</button>}
+                    {c.instagram && <a href={c.instagram} target="_blank" rel="noopener noreferrer" title="Instagram" style={{ width: 24, height: 24, borderRadius: 7, background: 'var(--coral-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}><Instagram size={11} color="var(--coral-deep)" /></a>}
+                    {c.facebook && <a href={c.facebook} target="_blank" rel="noopener noreferrer" title="Facebook" style={{ width: 24, height: 24, borderRadius: 7, background: 'var(--sky-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}><Facebook size={11} color="#4a7591" /></a>}
+                    {c.linkedin && <a href={c.linkedin} target="_blank" rel="noopener noreferrer" title="LinkedIn" style={{ width: 24, height: 24, borderRadius: 7, background: 'var(--lavender-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}><Linkedin size={11} color="#7d63a3" /></a>}
+                    {c.website && <a href={c.website} target="_blank" rel="noopener noreferrer" title="Website" style={{ width: 24, height: 24, borderRadius: 7, background: 'var(--line-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}><ExternalLink size={11} color="var(--ink-soft)" /></a>}
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+      {filesPeek && <ClientFilesPeekModal client={filesPeek} files={(clientAtts || []).filter(a => a.clientId === filesPeek.id)} onClose={() => setFilesPeek(null)} />}
+    </div>
+  );
+}
+
+function ClientFilesPeekModal({ client, files, onClose }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(58,45,45,0.3)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }} onClick={onClose}>
+      <div className="card scale-in" style={{ maxWidth: 540, width: '100%', maxHeight: '85vh', overflow: 'auto', padding: 22 }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-3 pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Paperclip size={15} color="white" /></div>
+          <div className="flex-1">
+            <p className="display" style={{ fontSize: 17, fontWeight: 500, margin: 0, lineHeight: 1.1 }}>{client.name} — Brand files</p>
+            <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', margin: '2px 0 0' }}>brand guidelines, logos, assets ✨</p>
+          </div>
+          <button onClick={onClose} className="btn-ghost" style={{ padding: 6 }}><X size={14} /></button>
+        </div>
+        <AttachmentList attachments={files} bucket="client-attachments" canDelete={false} emptyMessage="No files attached yet." />
+      </div>
     </div>
   );
 }
@@ -1654,9 +1738,11 @@ function Dashboard({ user, membership }) {
   const [briefs, setBriefs] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [teamMessages, setTeamMessages] = useState([]);
+  const [taskAttachments, setTaskAttachments] = useState([]);
+  const [clientAttachments, setClientAttachments] = useState([]);
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(true);
-  const setters = { tasks: setTasks, team: setTeam, teams: setTeams, clients: setClients, posts: setPosts, sheets: setSheets, strategies: setStrategies, comms: setComms, instagram_reports: setIgReports, notes: setNotes, client_briefs: setBriefs, leave_requests: setLeaveRequests, team_messages: setTeamMessages };
+  const setters = { tasks: setTasks, team: setTeam, teams: setTeams, clients: setClients, posts: setPosts, sheets: setSheets, strategies: setStrategies, comms: setComms, instagram_reports: setIgReports, notes: setNotes, client_briefs: setBriefs, leave_requests: setLeaveRequests, team_messages: setTeamMessages, task_attachments: setTaskAttachments, client_attachments: setClientAttachments };
   const refetch = useCallback(async (table) => { const data = await fetchTable(table); setters[table]?.(data); }, []);
   useEffect(() => { (async () => { const results = await Promise.all(TABLES.map(fetchTable)); TABLES.forEach((t, i) => setters[t]?.(results[i])); setLoading(false); })(); }, [user.id]);
   useEffect(() => { if (loading) return; const seedKey = `studio:seeded:${user.id}`; if (localStorage.getItem(seedKey)) return; if (teams.length > 0) { localStorage.setItem(seedKey, '1'); return; } const payload = DEFAULT_TEAMS.map(t => ({ ...t, user_id: user.id })); sb.from('teams').insert(payload).then(({ error }) => { if (!error) { localStorage.setItem(seedKey, '1'); refetch('teams'); } }); }, [loading, teams.length, user.id, refetch]);
@@ -1746,7 +1832,7 @@ function Dashboard({ user, membership }) {
           {view === 'dashboard' && <DashboardView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} strategies={strategies} notes={notes} teamMessages={teamMessages} leaveRequests={leaveRequests} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} onSaveNote={async (n) => { await saveItem('notes', n); }} onDeleteNote={async (id) => { await removeItem('notes', id); }} userEmail={user.email} userId={user.id} onRefreshMessages={() => refetch('team_messages')} />}
           {view === 'tasks' && <TasksView tasks={tasks} team={team} teams={teams} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
           {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} clients={clients} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} />}
-          {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} posts={posts} briefs={briefs} workspaceId={workspaceId} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} onEditBrief={(c) => setModal({ type: 'brief', data: { client: c, brief: briefs.find(b => b.clientId === c.id) } })} />}
+          {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} posts={posts} briefs={briefs} attachments={clientAttachments} workspaceId={workspaceId} userId={user.id} onRefreshAttachments={() => refetch('client_attachments')} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} onEditBrief={(c) => setModal({ type: 'brief', data: { client: c, brief: briefs.find(b => b.clientId === c.id) } })} />}
           {view === 'calendar' && <CalendarView posts={posts} clients={clients} updateStatus={updatePostStatus} onAdd={() => setModal({ type: 'post' })} onEdit={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'reports' && <ReportsView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} igReports={igReports} strategies={strategies} onAddIgReport={() => setModal({ type: 'igReport' })} onImportIg={() => setModal({ type: 'igImport' })} onEditIgReport={(r) => setModal({ type: 'igReport', data: r })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'sheets' && <SheetsView sheets={sheets} onAdd={() => setModal({ type: 'sheet' })} onEdit={(s) => setModal({ type: 'sheet', data: s })} />}
@@ -1756,7 +1842,7 @@ function Dashboard({ user, membership }) {
           {view === 'messages' && <MessagesAdminView messages={teamMessages} team={team} userId={user.id} onRefresh={() => refetch('team_messages')} />}
         </main>
       </div>
-      {modal?.type === 'task' && <TaskModal task={modal.data} team={team} clients={clients} onSave={async (t) => { await saveItem('tasks', t); const member = team.find(m => m.id === t.assigneeId); const client = clients.find(c => c.id === t.clientId); const memberTeam = member ? teams.find(tm => tm.id === member.teamId) : null; const hasPersonal = member && member.whatsapp; const hasGroup = memberTeam && memberTeam.whatsappGroup; if (hasPersonal || hasGroup) { setModal({ type: 'whatsappPrompt', task: t, member, memberTeam, client }); } else { setModal(null); } }} onDelete={modal.data ? async () => { await removeItem('tasks', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'task' && <TaskModal task={modal.data} team={team} clients={clients} attachments={taskAttachments} workspaceId={workspaceId} userId={user.id} onAttachmentsChange={() => refetch('task_attachments')} onSave={async (t) => { await saveItem('tasks', t); const member = team.find(m => m.id === t.assigneeId); const client = clients.find(c => c.id === t.clientId); const memberTeam = member ? teams.find(tm => tm.id === member.teamId) : null; const hasPersonal = member && member.whatsapp; const hasGroup = memberTeam && memberTeam.whatsappGroup; if (hasPersonal || hasGroup) { setModal({ type: 'whatsappPrompt', task: t, member, memberTeam, client }); } else { setModal(null); } }} onDelete={modal.data ? async () => { await removeItem('tasks', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'whatsappPrompt' && <WhatsAppPrompt task={modal.task} member={modal.member} memberTeam={modal.memberTeam} client={modal.client} onClose={() => setModal(null)} />}
       {modal?.type === 'member' && <MemberModal member={modal.data} teams={teams} tasks={tasks} clients={clients} onSave={async (m) => { await saveItem('team', m); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('team', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'invite' && <InviteMemberModal team={team} teams={teams} workspaceId={workspaceId} userId={user.id} existingMembers={workspaceMembers} onClose={() => setModal(null)} onDone={async () => { await refetchMembers(); await refetch('team'); setModal(null); }} />}
@@ -2407,7 +2493,7 @@ function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAd
   );
 }
 
-function ClientsView({ clients, comms, tasks, posts, briefs, workspaceId, onAdd, onEdit, onLog, onEditBrief }) {
+function ClientsView({ clients, comms, tasks, posts, briefs, attachments, workspaceId, userId, onRefreshAttachments, onAdd, onEdit, onLog, onEditBrief }) {
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -2506,6 +2592,19 @@ function ClientsView({ clients, comms, tasks, posts, briefs, workspaceId, onAdd,
             )}
             {sel.notes && <div className="mb-5 p-4" style={{ background: 'var(--bg-warmer)', borderRadius: 14 }}><p className="text-xs mb-1.5" style={{ color: 'var(--ink-soft)' }}>Notes</p><p className="text-sm leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>{sel.notes}</p></div>}
             <BriefSection client={sel} brief={(briefs || []).find(b => b.clientId === sel.id)} onEdit={() => onEditBrief && onEditBrief(sel)} />
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="display text-lg" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--gold-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Paperclip size={13} color="#a07a32" /></span>
+                    Files
+                  </h3>
+                  <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', marginTop: 2, marginLeft: 38 }}>brand guidelines, logos, assets ✨</p>
+                </div>
+                <FileUploader bucket="client-attachments" parentTable="client_attachments" parentId={sel.id} workspaceId={workspaceId} userId={userId} onUploaded={onRefreshAttachments} compact />
+              </div>
+              <AttachmentList attachments={(attachments || []).filter(a => a.clientId === sel.id)} bucket="client-attachments" canDelete onChanged={onRefreshAttachments} emptyMessage="No files yet. Upload brand guidelines, logos, or anything else your team should reference." />
+            </div>
             <div className="mb-5"><h3 className="display text-lg mb-3">Conversation log</h3>{selComms.length === 0 ? <p className="text-sm py-2" style={{ color: 'var(--ink-soft)' }}>No conversations logged yet.</p> : <div className="space-y-2.5">{selComms.map(c => <div key={c.id} className="p-3" style={{ background: 'var(--bg-warmer)', borderRadius: 12 }}><div className="flex items-center gap-2 mb-1"><span className="badge" style={{ background: 'var(--ink)', color: 'white' }}>{c.type}</span><span className="text-xs" style={{ color: 'var(--ink-soft)' }}>{formatDateTime(c.date)}</span></div><p className="text-sm leading-relaxed">{c.summary}</p></div>)}</div>}</div>
             <div><h3 className="display text-lg mb-3">Active tasks</h3>{selTasks.filter(t => t.status !== 'done').length === 0 ? <p className="text-sm py-1" style={{ color: 'var(--ink-soft)' }}>No active tasks.</p> : <div className="space-y-2">{selTasks.filter(t => t.status !== 'done').map(t => <div key={t.id} className="p-3 flex items-center justify-between" style={{ background: 'var(--bg-warmer)', borderRadius: 10 }}><p className="text-sm font-medium">{t.title}</p><span className="badge" style={{ background: STATUS_COLORS[t.status]?.bg, color: STATUS_COLORS[t.status]?.text }}>{STATUS_COLORS[t.status]?.label}</span></div>)}</div>}</div>
           </div>
@@ -2922,6 +3021,149 @@ function ReplyModal({ message, member, userId, onClose, onDone }) {
       </div>
       <Field label="Your reply"><textarea className="input-field" rows={4} value={reply} onChange={e => setReply(e.target.value)} placeholder="Type your reply..." autoFocus /></Field>
     </ModalShell>
+  );
+}
+
+// ====== FILE ATTACHMENTS ======
+const formatFileSize = (bytes) => {
+  if (!bytes) return '0 B';
+  const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+};
+
+const fileIconFor = (mime) => {
+  if (!mime) return '📄';
+  if (mime.startsWith('image/')) return '🖼️';
+  if (mime === 'application/pdf') return '📕';
+  if (mime.includes('word') || mime.includes('document')) return '📝';
+  if (mime.includes('sheet') || mime.includes('excel')) return '📊';
+  if (mime.includes('presentation') || mime.includes('powerpoint')) return '📊';
+  if (mime.includes('zip') || mime.includes('compressed')) return '🗜️';
+  if (mime.startsWith('video/')) return '🎬';
+  if (mime.startsWith('audio/')) return '🎵';
+  return '📄';
+};
+
+function FileUploader({ bucket, parentTable, parentId, workspaceId, userId, onUploaded, readOnly, compact }) {
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const inputRef = useRef(null);
+
+  const handleFiles = async (files) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    let succeeded = 0, failed = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setProgress(Math.round(((i) / files.length) * 100));
+      if (file.size > MAX_FILE_SIZE) {
+        alert(`"${file.name}" is too big (${formatFileSize(file.size)}). Max is ${formatFileSize(MAX_FILE_SIZE)}.`);
+        failed++;
+        continue;
+      }
+      // Path: workspace_id/parentId/timestamp-filename
+      const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${workspaceId}/${parentId}/${Date.now()}-${cleanName}`;
+      const { error: uploadErr } = await sb.storage.from(bucket).upload(path, file, { cacheControl: '3600', upsert: false });
+      if (uploadErr) {
+        alert(`Failed to upload "${file.name}": ${uploadErr.message}`);
+        failed++;
+        continue;
+      }
+      // Insert metadata
+      const meta = {
+        workspace_id: workspaceId,
+        file_path: path,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type || null,
+        uploaded_by: userId,
+      };
+      if (parentTable === 'task_attachments') meta.task_id = parentId;
+      else if (parentTable === 'client_attachments') meta.client_id = parentId;
+      const { error: metaErr } = await sb.from(parentTable).insert(meta);
+      if (metaErr) {
+        // Try to clean up the orphaned file
+        await sb.storage.from(bucket).remove([path]);
+        alert(`Could not save "${file.name}": ${metaErr.message}`);
+        failed++;
+        continue;
+      }
+      succeeded++;
+    }
+    setUploading(false);
+    setProgress(0);
+    if (inputRef.current) inputRef.current.value = '';
+    if (onUploaded) onUploaded();
+  };
+
+  if (readOnly) return null;
+
+  return (
+    <div>
+      <input ref={inputRef} type="file" multiple onChange={e => handleFiles(e.target.files)} style={{ display: 'none' }} disabled={uploading} />
+      <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading} className={compact ? 'btn-ghost' : 'btn-primary'} style={compact ? { fontSize: 11.5 } : { padding: '7px 14px', fontSize: 12 }}>
+        {uploading ? (
+          <>⏳ Uploading{progress > 0 ? ` ${progress}%` : '...'}</>
+        ) : (
+          <><Paperclip size={12} /> {compact ? 'Attach' : 'Attach files'}</>
+        )}
+      </button>
+    </div>
+  );
+}
+
+function AttachmentList({ attachments, bucket, canDelete, onChanged, emptyMessage }) {
+  const [downloading, setDownloading] = useState({});
+
+  const downloadFile = async (att) => {
+    setDownloading(d => ({ ...d, [att.id]: true }));
+    const { data, error } = await sb.storage.from(bucket).createSignedUrl(att.filePath, 60);
+    setDownloading(d => ({ ...d, [att.id]: false }));
+    if (error || !data) { alert('Could not download: ' + (error?.message || 'unknown error')); return; }
+    // Trigger download
+    const a = document.createElement('a');
+    a.href = data.signedUrl;
+    a.download = att.fileName || 'download';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const deleteFile = async (att) => {
+    if (!window.confirm(`Delete "${att.fileName}"? This can't be undone.`)) return;
+    // Delete from storage first
+    const { error: storageErr } = await sb.storage.from(bucket).remove([att.filePath]);
+    if (storageErr) { alert('Storage delete failed: ' + storageErr.message); return; }
+    // Then delete the metadata row
+    const table = bucket === 'task-attachments' ? 'task_attachments' : 'client_attachments';
+    const { error: dbErr } = await sb.from(table).delete().eq('id', att.id);
+    if (dbErr) { alert('Metadata delete failed: ' + dbErr.message); return; }
+    if (onChanged) onChanged();
+  };
+
+  if (!attachments || attachments.length === 0) {
+    return emptyMessage ? <p className="text-xs" style={{ color: 'var(--ink-soft)', fontStyle: 'italic' }}>{emptyMessage}</p> : null;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {attachments.map(att => (
+        <div key={att.id} style={{ background: 'var(--bg-warmer)', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>{fileIconFor(att.mimeType)}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p className="text-sm font-medium truncate" style={{ margin: 0 }}>{att.fileName}</p>
+            <p className="text-xs" style={{ color: 'var(--muted)', margin: '2px 0 0' }}>{formatFileSize(att.fileSize)}{att.uploadedAt ? ' · ' + formatDate(att.uploadedAt) : ''}</p>
+          </div>
+          <button onClick={() => downloadFile(att)} disabled={downloading[att.id]} className="btn-ghost" style={{ padding: '4px 9px', fontSize: 11 }} title="Download">
+            {downloading[att.id] ? '...' : <><Download size={11} /> Open</>}
+          </button>
+          {canDelete && <button onClick={() => deleteFile(att)} className="btn-ghost" style={{ padding: 5, fontSize: 11, color: 'var(--pink)' }} title="Delete"><Trash2 size={11} /></button>}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -3447,9 +3689,10 @@ function ModalShell({ title, onClose, onDelete, children, onSave, saveLabel = 'S
 }
 function Field({ label, children }) { return <div className="mb-3.5"><label style={{ display: 'block', fontSize: 11.5, marginBottom: 5, fontWeight: 600, color: 'var(--ink-soft)' }}>{label}</label>{children}</div>; }
 
-function TaskModal({ task, team, clients, onSave, onDelete, onClose }) {
+function TaskModal({ task, team, clients, attachments, workspaceId, userId, onAttachmentsChange, onSave, onDelete, onClose }) {
   const [data, setData] = useState(task || { title: '', description: '', status: 'todo', priority: 'medium', dueDate: '', assignedDate: today(), assigneeId: '', clientId: '' });
   const update = (k, v) => setData({ ...data, [k]: v });
+  const taskAtts = task?.id ? (attachments || []).filter(a => a.taskId === task.id) : [];
   return (<ModalShell title={task ? 'Edit task' : 'New task'} onClose={onClose} onDelete={onDelete} onSave={() => data.title.trim() && onSave(data)}>
     <Field label="Title"><input className="input-field" value={data.title} onChange={e => update('title', e.target.value)} placeholder="What needs to be done?" /></Field>
     <Field label="Description"><textarea className="input-field" rows={3} value={data.description || ''} onChange={e => update('description', e.target.value)} placeholder="Add details..." /></Field>
@@ -3462,6 +3705,21 @@ function TaskModal({ task, team, clients, onSave, onDelete, onClose }) {
         <Field label="Due by"><input type="date" className="input-field" value={data.dueDate || ''} onChange={e => update('dueDate', e.target.value)} /></Field>
       </div>
     </div>
+    {task?.id && (
+      <div style={{ borderTop: '1px solid var(--line)', margin: '14px 0 0', paddingTop: 14 }}>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <p className="text-xs font-semibold" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4, margin: 0 }}>ATTACHMENTS</p>
+            <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', margin: '2px 0 0' }}>briefs, references, files for this task 📎</p>
+          </div>
+          <FileUploader bucket="task-attachments" parentTable="task_attachments" parentId={task.id} workspaceId={workspaceId} userId={userId} onUploaded={onAttachmentsChange} compact />
+        </div>
+        <AttachmentList attachments={taskAtts} bucket="task-attachments" canDelete onChanged={onAttachmentsChange} emptyMessage="No files attached yet." />
+      </div>
+    )}
+    {!task?.id && (
+      <p className="hand text-xs" style={{ color: 'var(--coral-deep)', marginTop: 10, fontSize: '0.95rem' }}>save the task first, then you can attach files ✨</p>
+    )}
   </ModalShell>);
 }
 function MemberModal({ member, teams, tasks, clients, onSave, onDelete, onClose }) {
