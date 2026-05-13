@@ -1344,7 +1344,7 @@ function MemberTasks({ myTasks, team, teams, clients, briefs, taskAtts, clientAt
                     {t.description && (
                       <div style={{ marginBottom: 12 }}>
                         <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3 }}>DESCRIPTION</p>
-                        <p className="text-sm" style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap', margin: 0 }}>{t.description}</p>
+                        <Linkify text={t.description} className="text-sm" style={{ lineHeight: 1.5, margin: 0 }} />
                       </div>
                     )}
                     {taskFiles.length > 0 && (
@@ -2799,7 +2799,7 @@ function BriefCard({ title, icon, body, bg, colors, hashtags }) {
           ))}
         </div>
       ) : (
-        <p className="text-sm" style={{ lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>{body}</p>
+        <Linkify text={body} className="text-sm" style={{ lineHeight: 1.55, margin: 0 }} />
       )}
       {colorList.length > 0 && (
         <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
@@ -3025,6 +3025,44 @@ function ReplyModal({ message, member, userId, onClose, onDone }) {
 }
 
 // ====== FILE ATTACHMENTS ======
+// ====== AUTO-LINKIFY ======
+// Detects URLs in plain text and renders them as clickable links while preserving everything else.
+const URL_REGEX = /\b((?:https?:\/\/|www\.)[^\s<>"'`]+)/gi;
+function Linkify({ text, className, style }) {
+  if (!text) return null;
+  // Split text into parts, alternating between regular text and URL matches
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  // Need a fresh regex object since we use 'g' flag
+  const re = new RegExp(URL_REGEX.source, URL_REGEX.flags);
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+    let url = match[0];
+    // Strip trailing punctuation that's likely not part of the URL
+    let trailing = '';
+    while (url.length > 0 && /[.,;:!?)\]}>]/.test(url[url.length - 1])) {
+      trailing = url[url.length - 1] + trailing;
+      url = url.slice(0, -1);
+    }
+    const href = url.startsWith('http') ? url : 'https://' + url;
+    parts.push({ type: 'link', value: url, href });
+    if (trailing) parts.push({ type: 'text', value: trailing });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) parts.push({ type: 'text', value: text.slice(lastIndex) });
+  return (
+    <span className={className} style={{ whiteSpace: 'pre-wrap', ...(style || {}) }}>
+      {parts.map((p, i) => {
+        if (p.type === 'link') {
+          return <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--coral-deep)', textDecoration: 'underline', textDecorationColor: 'var(--coral-soft)', textUnderlineOffset: 2, wordBreak: 'break-all' }}>{p.value}</a>;
+        }
+        return <React.Fragment key={i}>{p.value}</React.Fragment>;
+      })}
+    </span>
+  );
+}
+
 const formatFileSize = (bytes) => {
   if (!bytes) return '0 B';
   const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
