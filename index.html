@@ -184,7 +184,7 @@ const FileText = I(<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 
 const ArrowRight = I(<><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></>);
 const Sparkles = I(<><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></>);
 
-const TABLES = ['teams', 'team', 'clients', 'tasks', 'posts', 'sheets', 'strategies', 'comms', 'instagram_reports', 'notes', 'client_briefs', 'leave_requests', 'team_messages', 'task_attachments', 'client_attachments'];
+const TABLES = ['teams', 'team', 'clients', 'tasks', 'posts', 'sheets', 'strategies', 'comms', 'instagram_reports', 'notes', 'client_briefs', 'leave_requests', 'team_messages', 'task_attachments', 'client_attachments', 'task_activity'];
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB per file
 const STATUS_COLORS = { todo: { bg: 'var(--line-soft)', text: 'var(--ink-soft)', label: 'To do' }, progress: { bg: 'var(--gold-soft)', text: '#a07a32', label: 'In progress' }, review: { bg: 'var(--lavender-soft)', text: 'var(--lavender)', label: 'Review' }, done: { bg: 'var(--sage-soft)', text: 'var(--sage)', label: 'Done' }, blocked: { bg: 'var(--pink-soft)', text: 'var(--pink)', label: 'Blocked' } };
 const PRIORITY_COLORS = { low: 'var(--muted)', medium: 'var(--gold)', high: 'var(--coral)' };
@@ -927,10 +927,11 @@ function MemberDashboard({ user, membership }) {
 
   const [taskAtts, setTaskAtts] = useState([]);
   const [clientAtts, setClientAtts] = useState([]);
+  const [taskActivity, setTaskActivity] = useState([]);
 
   // Fetch
   const fetchAll = useCallback(async () => {
-    const [t, tm, tms, c, p, b, lr, msg, ta, ca] = await Promise.all([
+    const [t, tm, tms, c, p, b, lr, msg, ta, ca, act] = await Promise.all([
       sb.from('tasks').select('*'),
       sb.from('team').select('*'),
       sb.from('teams').select('*'),
@@ -941,6 +942,7 @@ function MemberDashboard({ user, membership }) {
       sb.from('team_messages').select('*'),
       sb.from('task_attachments').select('*'),
       sb.from('client_attachments').select('*'),
+      sb.from('task_activity').select('*'),
     ]);
     setTasks((t.data || []).map(toCamel));
     setTeam((tm.data || []).map(toCamel));
@@ -952,6 +954,7 @@ function MemberDashboard({ user, membership }) {
     setTeamMessages((msg.data || []).map(toCamel));
     setTaskAtts((ta.data || []).map(toCamel));
     setClientAtts((ca.data || []).map(toCamel));
+    setTaskActivity((act.data || []).map(toCamel));
     setLoading(false);
   }, []);
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -959,6 +962,7 @@ function MemberDashboard({ user, membership }) {
     const ch = sb.channel('rt-member').on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchAll())
                                        .on('postgres_changes', { event: '*', schema: 'public', table: 'leave_requests' }, () => fetchAll())
                                        .on('postgres_changes', { event: '*', schema: 'public', table: 'team_messages' }, () => fetchAll())
+                                       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_activity' }, () => fetchAll())
                                        .subscribe();
     return () => sb.removeChannel(ch);
   }, [fetchAll]);
@@ -1072,7 +1076,7 @@ function MemberDashboard({ user, membership }) {
         </aside>
         <main className="flex-1 min-h-screen" style={{ padding: '32px 40px', maxWidth: 1100 }}>
           {view === 'day' && <MemberDay displayName={displayName} myTasks={myTasks} myActive={myActive} myDone={myDone} myClients={myClients} team={team} teams={teams} clients={clients} briefs={briefs} updateTaskStatus={updateTaskStatus} setView={setView} onPeekBrief={(c) => setBriefPeek(c)} />}
-          {view === 'tasks' && <MemberTasks myTasks={myTasks} team={team} teams={teams} clients={clients} briefs={briefs} taskAtts={taskAtts} clientAtts={clientAtts} updateTaskStatus={updateTaskStatus} onPeekBrief={(c) => setBriefPeek(c)} />}
+          {view === 'tasks' && <MemberTasks myTasks={myTasks} team={team} teams={teams} clients={clients} briefs={briefs} taskAtts={taskAtts} clientAtts={clientAtts} taskActivity={taskActivity} userId={user.id} updateTaskStatus={updateTaskStatus} onPeekBrief={(c) => setBriefPeek(c)} />}
           {view === 'calendar' && <MemberCalendar myPosts={myPosts} clients={clients} />}
           {view === 'clients' && <MemberClients myClients={myClients} myTasks={myTasks} briefs={briefs} clientAtts={clientAtts} onPeekBrief={(c) => setBriefPeek(c)} />}
           {view === 'leave' && <MemberLeaveView leave={myLeave} workspaceId={membership.workspaceId} teamMemberId={teamMemberId} userId={user.id} onRefresh={fetchAll} />}
@@ -1293,7 +1297,7 @@ function BriefPeekModal({ client, brief, onClose }) {
   );
 }
 
-function MemberTasks({ myTasks, team, teams, clients, briefs, taskAtts, clientAtts, updateTaskStatus, onPeekBrief }) {
+function MemberTasks({ myTasks, team, teams, clients, briefs, taskAtts, clientAtts, taskActivity, userId, updateTaskStatus, onPeekBrief }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState({});
@@ -1320,7 +1324,8 @@ function MemberTasks({ myTasks, team, teams, clients, briefs, taskAtts, clientAt
             const client = clients.find(c => c.id === t.clientId);
             const clientFiles = client ? (clientAtts || []).filter(a => a.clientId === client.id) : [];
             const brief = client ? briefs.find(b => b.clientId === client.id) : null;
-            const hasExtras = taskFiles.length > 0 || clientFiles.length > 0 || t.description;
+            const taskEvents = (taskActivity || []).filter(a => a.taskId === t.id);
+            const hasExtras = taskFiles.length > 0 || clientFiles.length > 0 || t.description || taskEvents.length > 0;
             const isExpanded = expanded[t.id];
             return (
               <div key={t.id}>
@@ -1334,6 +1339,7 @@ function MemberTasks({ myTasks, team, teams, clients, briefs, taskAtts, clientAt
                           {t.description ? '📝 details' : ''}
                           {taskFiles.length > 0 && <span style={{ marginLeft: t.description ? 8 : 0 }}>📎 {taskFiles.length}</span>}
                           {client && brief && <span style={{ marginLeft: 8 }}>📖 brief</span>}
+                          {taskEvents.length > 0 && <span style={{ marginLeft: 8 }}>🕐 {taskEvents.length}</span>}
                         </span>
                       )}
                     </button>
@@ -1360,7 +1366,13 @@ function MemberTasks({ myTasks, team, teams, clients, briefs, taskAtts, clientAt
                       </div>
                     )}
                     {client && brief && (
-                      <button onClick={() => onPeekBrief(client)} className="btn-primary" style={{ padding: '6px 12px', fontSize: 11 }}>📖 View brand brief</button>
+                      <button onClick={() => onPeekBrief(client)} className="btn-primary" style={{ padding: '6px 12px', fontSize: 11, marginBottom: 12 }}>📖 View brand brief</button>
+                    )}
+                    {(taskActivity || []).some(a => a.taskId === t.id) && (
+                      <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, marginTop: 4 }}>
+                        <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--ink-soft)', letterSpacing: 0.3 }}>ACTIVITY</p>
+                        <ActivitySection activity={taskActivity} taskId={t.id} team={team} clients={clients} currentUserId={userId} />
+                      </div>
                     )}
                   </div>
                 )}
@@ -1740,9 +1752,10 @@ function Dashboard({ user, membership }) {
   const [teamMessages, setTeamMessages] = useState([]);
   const [taskAttachments, setTaskAttachments] = useState([]);
   const [clientAttachments, setClientAttachments] = useState([]);
+  const [taskActivity, setTaskActivity] = useState([]);
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(true);
-  const setters = { tasks: setTasks, team: setTeam, teams: setTeams, clients: setClients, posts: setPosts, sheets: setSheets, strategies: setStrategies, comms: setComms, instagram_reports: setIgReports, notes: setNotes, client_briefs: setBriefs, leave_requests: setLeaveRequests, team_messages: setTeamMessages, task_attachments: setTaskAttachments, client_attachments: setClientAttachments };
+  const setters = { tasks: setTasks, team: setTeam, teams: setTeams, clients: setClients, posts: setPosts, sheets: setSheets, strategies: setStrategies, comms: setComms, instagram_reports: setIgReports, notes: setNotes, client_briefs: setBriefs, leave_requests: setLeaveRequests, team_messages: setTeamMessages, task_attachments: setTaskAttachments, client_attachments: setClientAttachments, task_activity: setTaskActivity };
   const refetch = useCallback(async (table) => { const data = await fetchTable(table); setters[table]?.(data); }, []);
   useEffect(() => { (async () => { const results = await Promise.all(TABLES.map(fetchTable)); TABLES.forEach((t, i) => setters[t]?.(results[i])); setLoading(false); })(); }, [user.id]);
   useEffect(() => { if (loading) return; const seedKey = `studio:seeded:${user.id}`; if (localStorage.getItem(seedKey)) return; if (teams.length > 0) { localStorage.setItem(seedKey, '1'); return; } const payload = DEFAULT_TEAMS.map(t => ({ ...t, user_id: user.id })); sb.from('teams').insert(payload).then(({ error }) => { if (!error) { localStorage.setItem(seedKey, '1'); refetch('teams'); } }); }, [loading, teams.length, user.id, refetch]);
@@ -1842,7 +1855,7 @@ function Dashboard({ user, membership }) {
           {view === 'messages' && <MessagesAdminView messages={teamMessages} team={team} userId={user.id} onRefresh={() => refetch('team_messages')} />}
         </main>
       </div>
-      {modal?.type === 'task' && <TaskModal task={modal.data} team={team} clients={clients} attachments={taskAttachments} workspaceId={workspaceId} userId={user.id} onAttachmentsChange={() => refetch('task_attachments')} onSave={async (t) => { await saveItem('tasks', t); const member = team.find(m => m.id === t.assigneeId); const client = clients.find(c => c.id === t.clientId); const memberTeam = member ? teams.find(tm => tm.id === member.teamId) : null; const hasPersonal = member && member.whatsapp; const hasGroup = memberTeam && memberTeam.whatsappGroup; if (hasPersonal || hasGroup) { setModal({ type: 'whatsappPrompt', task: t, member, memberTeam, client }); } else { setModal(null); } }} onDelete={modal.data ? async () => { await removeItem('tasks', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
+      {modal?.type === 'task' && <TaskModal task={modal.data} team={team} clients={clients} attachments={taskAttachments} activity={taskActivity} workspaceId={workspaceId} userId={user.id} onAttachmentsChange={() => refetch('task_attachments')} onSave={async (t) => { await saveItem('tasks', t); const member = team.find(m => m.id === t.assigneeId); const client = clients.find(c => c.id === t.clientId); const memberTeam = member ? teams.find(tm => tm.id === member.teamId) : null; const hasPersonal = member && member.whatsapp; const hasGroup = memberTeam && memberTeam.whatsappGroup; if (hasPersonal || hasGroup) { setModal({ type: 'whatsappPrompt', task: t, member, memberTeam, client }); } else { setModal(null); } }} onDelete={modal.data ? async () => { await removeItem('tasks', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'whatsappPrompt' && <WhatsAppPrompt task={modal.task} member={modal.member} memberTeam={modal.memberTeam} client={modal.client} onClose={() => setModal(null)} />}
       {modal?.type === 'member' && <MemberModal member={modal.data} teams={teams} tasks={tasks} clients={clients} onSave={async (m) => { await saveItem('team', m); setModal(null); }} onDelete={modal.data ? async () => { await removeItem('team', modal.data.id); setModal(null); } : null} onClose={() => setModal(null)} />}
       {modal?.type === 'invite' && <InviteMemberModal team={team} teams={teams} workspaceId={workspaceId} userId={user.id} existingMembers={workspaceMembers} onClose={() => setModal(null)} onDone={async () => { await refetchMembers(); await refetch('team'); setModal(null); }} />}
@@ -3312,6 +3325,87 @@ function AttachmentList({ attachments, bucket, canDelete, onChanged, emptyMessag
   );
 }
 
+function ActivitySection({ activity, taskId, team, clients, currentUserId, currentUserName }) {
+  const events = (activity || []).filter(a => a.taskId === taskId).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  if (events.length === 0) return (
+    <p className="hand text-center py-3" style={{ color: 'var(--muted)', fontSize: '0.95rem' }}>no activity yet — make a change to see the timeline ✨</p>
+  );
+
+  const actorName = (actorId) => {
+    if (!actorId) return 'Someone';
+    if (actorId === currentUserId) return 'You';
+    // Try to find the user by linking through team's email (best effort)
+    const memberByEmail = team.find(m => m.email && actorId);
+    return memberByEmail?.name || 'A teammate';
+  };
+  const memberName = (id) => team.find(m => m.id === id)?.name || 'someone';
+  const clientName = (id) => clients.find(c => c.id === id)?.name || 'a client';
+  const STATUS_LABELS = { todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' };
+  const PRIORITY_LABELS = { low: 'Low', medium: 'Medium', high: 'High' };
+
+  const describe = (e) => {
+    const who = actorName(e.actorId);
+    switch (e.eventType) {
+      case 'created': return { icon: '✨', text: <><strong>{who}</strong> created this task</>, color: 'var(--coral)' };
+      case 'status_changed': return { icon: '➡️', text: <><strong>{who}</strong> moved status to <strong>{STATUS_LABELS[e.toValue] || e.toValue}</strong></>, color: e.toValue === 'done' ? 'var(--sage)' : 'var(--lavender)' };
+      case 'assignee_changed': {
+        const newName = e.toValue ? memberName(e.toValue) : null;
+        const oldName = e.fromValue ? memberName(e.fromValue) : null;
+        if (!e.toValue) return { icon: '👤', text: <><strong>{who}</strong> unassigned this</>, color: 'var(--muted)' };
+        if (!e.fromValue) return { icon: '👤', text: <><strong>{who}</strong> assigned to <strong>{newName}</strong></>, color: 'var(--coral)' };
+        return { icon: '👤', text: <><strong>{who}</strong> reassigned from {oldName} to <strong>{newName}</strong></>, color: 'var(--coral)' };
+      }
+      case 'priority_changed': return { icon: '⚡', text: <><strong>{who}</strong> changed priority to <strong>{PRIORITY_LABELS[e.toValue] || e.toValue}</strong></>, color: e.toValue === 'high' ? 'var(--pink)' : 'var(--muted)' };
+      case 'due_date_changed': {
+        if (!e.toValue) return { icon: '📅', text: <><strong>{who}</strong> removed the due date</>, color: 'var(--muted)' };
+        if (!e.fromValue) return { icon: '📅', text: <><strong>{who}</strong> set due date to <strong>{formatDate(e.toValue)}</strong></>, color: 'var(--coral)' };
+        return { icon: '📅', text: <><strong>{who}</strong> changed due date to <strong>{formatDate(e.toValue)}</strong></>, color: 'var(--coral)' };
+      }
+      case 'title_changed': return { icon: '✏️', text: <><strong>{who}</strong> renamed this task</>, color: 'var(--muted)' };
+      case 'client_changed': {
+        if (!e.toValue) return { icon: '🏢', text: <><strong>{who}</strong> removed client</>, color: 'var(--muted)' };
+        return { icon: '🏢', text: <><strong>{who}</strong> linked to <strong>{clientName(e.toValue)}</strong></>, color: 'var(--lavender)' };
+      }
+      case 'attached': return { icon: '📎', text: <><strong>{who}</strong> attached <strong>{e.toValue}</strong></>, color: 'var(--gold)' };
+      case 'detached': return { icon: '📎', text: <><strong>{who}</strong> removed <em>{e.fromValue}</em></>, color: 'var(--muted)' };
+      default: return { icon: '•', text: <><strong>{who}</strong> made a change</>, color: 'var(--muted)' };
+    }
+  };
+
+  const timeAgo = (dateStr) => {
+    if (!dateStr) return '';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return m + 'm ago';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + 'h ago';
+    const d = Math.floor(h / 24);
+    if (d < 7) return d + 'd ago';
+    return formatDate(dateStr);
+  };
+
+  return (
+    <div style={{ maxHeight: 280, overflowY: 'auto', paddingRight: 4 }}>
+      <div style={{ position: 'relative' }}>
+        <div style={{ position: 'absolute', left: 11, top: 14, bottom: 14, width: 2, background: 'var(--line)', borderRadius: 1 }}></div>
+        {events.map(e => {
+          const d = describe(e);
+          return (
+            <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '6px 0', position: 'relative' }}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'white', border: '1.5px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0, position: 'relative', zIndex: 1 }}>{d.icon}</div>
+              <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                <p className="text-xs" style={{ margin: 0, lineHeight: 1.45, color: 'var(--ink)' }}>{d.text}</p>
+                <p className="text-xs" style={{ color: 'var(--muted)', margin: '1px 0 0', fontSize: 11 }}>{timeAgo(e.createdAt)}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function StatTile({ icon: Icon, iconBg, iconColor, value, label }) {
   return (
     <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -3834,7 +3928,7 @@ function ModalShell({ title, onClose, onDelete, children, onSave, saveLabel = 'S
 }
 function Field({ label, children }) { return <div className="mb-3.5"><label style={{ display: 'block', fontSize: 11.5, marginBottom: 5, fontWeight: 600, color: 'var(--ink-soft)' }}>{label}</label>{children}</div>; }
 
-function TaskModal({ task, team, clients, attachments, workspaceId, userId, onAttachmentsChange, onSave, onDelete, onClose }) {
+function TaskModal({ task, team, clients, attachments, activity, workspaceId, userId, onAttachmentsChange, onSave, onDelete, onClose }) {
   const [data, setData] = useState(task || { title: '', description: '', status: 'todo', priority: 'medium', dueDate: '', assignedDate: today(), assigneeId: '', clientId: '' });
   const update = (k, v) => setData({ ...data, [k]: v });
   const taskAtts = task?.id ? (attachments || []).filter(a => a.taskId === task.id) : [];
@@ -3862,8 +3956,17 @@ function TaskModal({ task, team, clients, attachments, workspaceId, userId, onAt
         <AttachmentList attachments={taskAtts} bucket="task-attachments" canDelete onChanged={onAttachmentsChange} emptyMessage="No files attached yet." />
       </div>
     )}
+    {task?.id && (
+      <div style={{ borderTop: '1px solid var(--line)', margin: '14px 0 0', paddingTop: 14 }}>
+        <div className="mb-2">
+          <p className="text-xs font-semibold" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4, margin: 0 }}>ACTIVITY</p>
+          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', margin: '2px 0 0' }}>everything that's happened to this task 🕐</p>
+        </div>
+        <ActivitySection activity={activity} taskId={task.id} team={team} clients={clients} currentUserId={userId} />
+      </div>
+    )}
     {!task?.id && (
-      <p className="hand text-xs" style={{ color: 'var(--coral-deep)', marginTop: 10, fontSize: '0.95rem' }}>save the task first, then you can attach files ✨</p>
+      <p className="hand text-xs" style={{ color: 'var(--coral-deep)', marginTop: 10, fontSize: '0.95rem' }}>save the task first, then you can attach files & see activity ✨</p>
     )}
   </ModalShell>);
 }
