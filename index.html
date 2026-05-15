@@ -2869,6 +2869,13 @@ function TaskRow({ task, team, teams, clients, compact, onClick, onStatusChange 
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         {client && <span className="badge" style={{ background: 'var(--lavender-soft)', color: 'var(--lavender)' }}>{client.name}</span>}
+        {task.quantityTarget != null && task.quantityTarget > 0 && (
+          <span className="badge" style={{
+            background: (task.quantityDone || 0) >= task.quantityTarget ? 'var(--sage-soft)' : 'var(--coral-soft)',
+            color: (task.quantityDone || 0) >= task.quantityTarget ? 'var(--sage)' : 'var(--coral-deep)',
+            fontWeight: 600
+          }}>📦 {task.quantityDone || 0} / {task.quantityTarget}</span>
+        )}
         <span className="badge" style={{ background: status.bg, color: status.text }}>{status.label}</span>
         {task.dueDate && !isDone && <span className="text-xs flex items-center gap-1" style={{ color: isOverdue ? 'var(--pink)' : 'var(--coral-deep)', fontWeight: 600 }}><Clock size={11} /> due {formatDate(task.dueDate)}</span>}
       </div>
@@ -3122,6 +3129,15 @@ function MemberTaskRow({ task, clients, onEditTask, onQuickStatus, onDeleteTask,
         </p>
       </div>
       {overdue && <span className="badge" style={{ background: 'var(--pink-soft)', color: 'var(--pink)', fontWeight: 600 }}>Overdue</span>}
+      {task.quantityTarget != null && task.quantityTarget > 0 && (
+        <span className="badge" style={{
+          background: (task.quantityDone || 0) >= task.quantityTarget ? 'var(--sage-soft)' : 'var(--coral-soft)',
+          color: (task.quantityDone || 0) >= task.quantityTarget ? 'var(--sage)' : 'var(--coral-deep)',
+          fontWeight: 600
+        }}>
+          {task.quantityDone || 0} / {task.quantityTarget}
+        </span>
+      )}
       <span className="badge" style={{ background: status.bg, color: status.text, fontWeight: 600 }}>{status.label || task.status}</span>
       <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
         <button onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === task.id ? null : task.id); }} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', fontSize: 18, padding: '4px 6px', cursor: 'pointer', lineHeight: 1 }}>⋮</button>
@@ -3150,6 +3166,11 @@ function MemberOverview({ member, tasks, clients }) {
   const lifetimeDone = tasks.filter(t => t.status === 'done').length;
   const currentlyActive = tasks.filter(t => t.status !== 'done').length;
 
+  // Deliverables this month — sum of quantity_done across tasks completed (or active) this month with quantity set
+  const thisMonthTasks = tasks.filter(t => (t.completedAt || t.assignedDate || '').startsWith(thisMonth));
+  const deliverablesDone = thisMonthTasks.reduce((sum, t) => sum + (t.quantityDone || 0), 0);
+  const deliverablesTarget = thisMonthTasks.reduce((sum, t) => sum + (t.quantityTarget || 0), 0);
+
   // By client
   const byClient = {};
   tasks.forEach(t => {
@@ -3168,6 +3189,21 @@ function MemberOverview({ member, tasks, clients }) {
         <div className="card"><p className="stat-num text-2xl" style={{ color: 'var(--lavender)' }}>{doneLastMonth}</p><p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Done last month</p></div>
         <div className="card"><p className="stat-num text-2xl" style={{ color: 'var(--gold)' }}>{lifetimeDone}</p><p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Done all-time</p></div>
       </div>
+
+      {deliverablesTarget > 0 && (
+        <div className="card" style={{ background: 'linear-gradient(135deg, var(--coral-soft), var(--gold-soft))', border: '1px solid var(--line)' }}>
+          <div className="flex items-center gap-3">
+            <span style={{ fontSize: 28 }}>📦</span>
+            <div style={{ flex: 1 }}>
+              <p className="display" style={{ fontSize: '1.4rem', fontWeight: 500, margin: 0, lineHeight: 1 }}>
+                {deliverablesDone} <span style={{ color: 'var(--ink-soft)', fontSize: '1rem' }}>/ {deliverablesTarget}</span>
+              </p>
+              <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1rem', margin: '4px 0 0' }}>deliverables this month ✨</p>
+              <p className="text-xs" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>across tasks where quantity is tracked · individual items like reels, designs, carousels</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {clientList.length > 0 && (
         <div className="card">
@@ -4830,13 +4866,53 @@ function ModalShell({ title, onClose, onDelete, children, onSave, saveLabel = 'S
 function Field({ label, children }) { return <div className="mb-3.5"><label style={{ display: 'block', fontSize: 11.5, marginBottom: 5, fontWeight: 600, color: 'var(--ink-soft)' }}>{label}</label>{children}</div>; }
 
 function TaskModal({ task, team, clients, attachments, activity, workspaceId, userId, onAttachmentsChange, onSave, onDelete, onClose }) {
-  const [data, setData] = useState(task || { title: '', description: '', status: 'todo', priority: 'medium', dueDate: '', assignedDate: today(), assigneeId: '', clientId: '' });
+  const [data, setData] = useState(task || { title: '', description: '', status: 'todo', priority: 'medium', dueDate: '', assignedDate: today(), assigneeId: '', clientId: '', quantityTarget: null, quantityDone: null });
   const update = (k, v) => setData({ ...data, [k]: v });
+  const updateNum = (k, v) => setData({ ...data, [k]: v === '' ? null : Math.max(0, parseInt(v, 10) || 0) });
   const taskAtts = task?.id ? (attachments || []).filter(a => a.taskId === task.id) : [];
-  return (<ModalShell title={task ? 'Edit task' : 'New task'} onClose={onClose} onDelete={onDelete} onSave={() => data.title.trim() && onSave(data)}>
+
+  // Auto-complete logic: if quantity target is set and finished >= target, force status to 'done'
+  const handleSave = () => {
+    if (!data.title.trim()) return;
+    const out = { ...data };
+    const target = out.quantityTarget;
+    const done = out.quantityDone;
+    if (target != null && target > 0 && done != null && done >= target && out.status !== 'done') {
+      out.status = 'done';
+      out.completedAt = new Date().toISOString();
+    }
+    onSave(out);
+  };
+
+  // Compute progress for the small inline indicator
+  const hasQty = data.quantityTarget != null && data.quantityTarget > 0;
+  const qtyDone = data.quantityDone || 0;
+  const qtyTarget = data.quantityTarget || 0;
+  const qtyComplete = hasQty && qtyDone >= qtyTarget;
+
+  return (<ModalShell title={task ? 'Edit task' : 'New task'} onClose={onClose} onDelete={onDelete} onSave={handleSave}>
     <Field label="Title"><input className="input-field" value={data.title} onChange={e => update('title', e.target.value)} placeholder="What needs to be done?" /></Field>
     <Field label="Description"><textarea className="input-field" rows={3} value={data.description || ''} onChange={e => update('description', e.target.value)} placeholder="Add details..." /></Field>
     <div className="grid grid-cols-2 gap-3"><Field label="Status"><select className="input-field" value={data.status} onChange={e => update('status', e.target.value)}><option value="todo">To do</option><option value="progress">In progress</option><option value="review">Review</option><option value="done">Done</option><option value="blocked">Blocked</option></select></Field><Field label="Priority"><select className="input-field" value={data.priority} onChange={e => update('priority', e.target.value)}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></Field><Field label="Assignee"><select className="input-field" value={data.assigneeId || ''} onChange={e => update('assigneeId', e.target.value)}><option value="">Unassigned</option>{team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field><Field label="Client"><select className="input-field" value={data.clientId || ''} onChange={e => update('clientId', e.target.value)}><option value="">No client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field></div>
+
+    {/* Quantity section */}
+    <div style={{ borderTop: '1px solid var(--line)', margin: '6px 0 4px', paddingTop: 14 }}>
+      <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4 }}>📦 QUANTITY (optional)</p>
+      <p className="hand mb-3" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem' }}>use when one task covers multiple deliverables (e.g. 5 carousels, 10 reels) ✨</p>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Target"><input type="number" min="0" className="input-field" value={data.quantityTarget == null ? '' : data.quantityTarget} onChange={e => updateNum('quantityTarget', e.target.value)} placeholder="e.g. 10" /></Field>
+        <Field label="Finished"><input type="number" min="0" className="input-field" value={data.quantityDone == null ? '' : data.quantityDone} onChange={e => updateNum('quantityDone', e.target.value)} placeholder="e.g. 7" /></Field>
+      </div>
+      {hasQty && (
+        <div style={{ background: qtyComplete ? 'var(--sage-soft)' : 'var(--coral-soft)', borderRadius: 8, padding: '8px 12px', marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14 }}>{qtyComplete ? '✓' : '⏱'}</span>
+          <p className="text-xs" style={{ color: qtyComplete ? 'var(--sage)' : 'var(--coral-deep)', margin: 0, fontWeight: 500 }}>
+            {qtyComplete ? `All ${qtyTarget} done — task will auto-mark as Done when you save ✨` : `${qtyDone} of ${qtyTarget} finished${qtyTarget - qtyDone > 0 ? ` · ${qtyTarget - qtyDone} to go` : ''}`}
+          </p>
+        </div>
+      )}
+    </div>
+
     <div style={{ borderTop: '1px solid var(--line)', margin: '6px 0 4px', paddingTop: 14 }}>
       <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4 }}>TIMING</p>
       <p className="hand mb-3" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem' }}>when you gave it & when it's due ✨</p>
