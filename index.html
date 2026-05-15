@@ -729,114 +729,133 @@ function generateMemberReportPDF(member, memberTeam, memberTasks, clients, perio
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
-  const margin = 40; let y = margin;
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
 
   const accent = memberTeam?.color || '#e89177';
   const hexToRgb = (h) => { const x = h.replace('#', ''); const v = parseInt(x.length === 3 ? x.split('').map(c => c + c).join('') : x, 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; };
   const [ar, ag, ab] = hexToRgb(accent);
 
-  // Header band
+  // ===== Dark header band with team-color stripe =====
   doc.setFillColor(58, 45, 45); doc.rect(0, 0, pageW, 90, 'F');
   doc.setFillColor(ar, ag, ab); doc.rect(0, 86, pageW, 4, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold').setFontSize(22);
-  doc.text('Performance Report', margin, 38);
+  doc.text(member.name || 'Member', margin, 42);
   doc.setFont('helvetica', 'normal').setFontSize(11);
-  doc.text((member.name || 'Member') + '  ·  ' + (memberTeam?.name || 'No team') + '  ·  ' + periodLabel, margin, 60);
+  const subtitle = [
+    member.role,
+    memberTeam?.name,
+    periodLabel,
+  ].filter(Boolean).join('  ·  ');
+  doc.text(subtitle, margin, 64);
 
-  y = 120;
-  doc.setTextColor(58, 45, 45);
+  let y = 120;
 
-  // Profile block
-  doc.setFont('helvetica', 'bold').setFontSize(14);
-  doc.text('Profile', margin, y); y += 18;
-  doc.setFont('helvetica', 'normal').setFontSize(10);
-  doc.setTextColor(107, 88, 86);
-  const profileLines = [
-    'Role: ' + (member.role || '—'),
-    'Team: ' + (memberTeam?.name || 'Unassigned'),
-    'Email: ' + (member.email || '—'),
-    'WhatsApp: ' + (member.whatsapp || '—'),
-  ];
-  profileLines.forEach(line => { doc.text(line, margin, y); y += 14; });
-  y += 8;
+  // Month label from first task's date (best guess) or fall back to periodLabel
+  const monthLabel = (() => {
+    const firstDate = memberTasks.find(t => t.completedAt || t.assignedDate || t.createdAt);
+    if (firstDate) {
+      try { const d = new Date((firstDate.completedAt || firstDate.assignedDate || firstDate.createdAt).slice(0, 10) + 'T00:00:00'); return d.toLocaleString('en-US', { month: 'long' }); } catch {}
+    }
+    return periodLabel;
+  })();
 
-  // Period stats
-  const completed = memberTasks.filter(t => t.status === 'done').length;
-  const inProgress = memberTasks.filter(t => t.status === 'progress').length;
-  const todo = memberTasks.filter(t => t.status === 'todo').length;
-  const review = memberTasks.filter(t => t.status === 'review').length;
-  const blocked = memberTasks.filter(t => t.status === 'blocked').length;
-  const completionRate = memberTasks.length > 0 ? Math.round((completed / memberTasks.length) * 100) + '%' : '—';
-  const onTime = memberTasks.filter(t => t.status === 'done' && t.dueDate && t.completedAt && t.completedAt <= t.dueDate).length;
-  const onTimeRate = completed > 0 ? Math.round((onTime / completed) * 100) + '%' : '—';
-
-  doc.setTextColor(58, 45, 45);
-  doc.setFont('helvetica', 'bold').setFontSize(14);
-  doc.text('Workload summary', margin, y); y += 18;
-  drawMetricGrid(doc, [
-    { label: 'Total tasks', value: memberTasks.length },
-    { label: 'Completed', value: completed },
-    { label: 'In progress', value: inProgress },
-    { label: 'Completion rate', value: completionRate },
-  ], margin, y, pageW - margin * 2);
-  y += 80;
-
-  drawMetricGrid(doc, [
-    { label: 'To do', value: todo },
-    { label: 'In review', value: review },
-    { label: 'Blocked', value: blocked },
-    { label: 'On-time rate', value: onTimeRate },
-  ], margin, y, pageW - margin * 2);
-  y += 90;
-
-  // Tasks by client
-  const byClient = {};
-  memberTasks.forEach(t => {
-    const cName = clients.find(c => c.id === t.clientId)?.name || 'No client';
-    if (!byClient[cName]) byClient[cName] = { total: 0, done: 0 };
-    byClient[cName].total++;
-    if (t.status === 'done') byClient[cName].done++;
-  });
-  const clientRows = Object.entries(byClient).sort((a, b) => b[1].total - a[1].total);
-  if (clientRows.length > 0) {
-    if (y > 680) { doc.addPage(); y = margin; }
-    doc.setFont('helvetica', 'bold').setFontSize(14);
-    doc.text('Workload by client', margin, y); y += 14;
-    const tableData = clientRows.map(([name, s]) => [name, String(s.total), String(s.done), s.total > 0 ? Math.round((s.done / s.total) * 100) + '%' : '—']);
-    doc.autoTable({ startY: y, head: [['Client', 'Tasks', 'Completed', 'Rate']], body: tableData, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 10, cellPadding: 7 }, headStyles: { fillColor: [ar, ag, ab], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] } });
-    y = doc.lastAutoTable.finalY + 22;
-  }
-
-  // Full task list
+  // ===== Single sheet-style table =====
   if (memberTasks.length > 0) {
-    if (y > 600) { doc.addPage(); y = margin; }
-    doc.setTextColor(58, 45, 45);
-    doc.setFont('helvetica', 'bold').setFontSize(14);
-    doc.text('All tasks in period', margin, y); y += 14;
-    const sorted = [...memberTasks].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-    const extraHeads = [];
-    if (opts.includeQty) extraHeads.push('Done', 'Target');
-    if (opts.includeDescriptions) extraHeads.push('Description');
-    const taskRows = sorted.map(t => {
+    // Sort: done first, then in progress, then todo
+    const statusOrder = { done: 0, progress: 1, review: 2, todo: 3, blocked: 4 };
+    const sorted = [...memberTasks].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
+
+    const taskQty = (t) => ({ target: t.quantityTarget || 0, done: t.quantityDone || 0 });
+    const sumQty = (list) => list.reduce((s, t) => { const q = taskQty(t); s.target += q.target; s.done += q.done; return s; }, { target: 0, done: 0 });
+
+    const bodyRows = sorted.map((t, idx) => {
       const cName = clients.find(c => c.id === t.clientId)?.name || '—';
+      const q = taskQty(t);
+      const qStr = q.target > 0 ? `${q.done} / ${q.target}` : (q.done > 0 ? String(q.done) : '—');
+      const rate = q.target > 0 ? Math.round((q.done / q.target) * 100) + '%' : '—';
       const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
       const row = [
-        (t.title || '').slice(0, 50) + ((t.title || '').length > 50 ? '…' : ''),
+        String(idx + 1),
         cName,
+        (t.title || '').slice(0, 50) + ((t.title || '').length > 50 ? '…' : ''),
+        qStr,
+        rate,
         statusLabel,
-        t.priority || '—',
-        t.dueDate ? formatDate(t.dueDate) : '—',
       ];
-      if (opts.includeQty) row.push(t.quantityDone != null ? String(t.quantityDone) : '—', t.quantityTarget != null ? String(t.quantityTarget) : '—');
       if (opts.includeDescriptions) row.push((t.description || '').slice(0, 90));
       return row;
     });
-    doc.autoTable({ startY: y, head: [['Task', 'Client', 'Status', 'Priority', 'Due', ...extraHeads]], body: taskRows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 6 }, headStyles: { fillColor: [ar, ag, ab], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] }, columnStyles: { 0: { cellWidth: opts.includeDescriptions ? 130 : 180 } } });
+    // Total row
+    const memberTotal = sumQty(memberTasks);
+    const totalQ = memberTotal.target > 0 ? `${memberTotal.done} / ${memberTotal.target}` : (memberTotal.done > 0 ? String(memberTotal.done) : '—');
+    const totalRate = memberTotal.target > 0 ? Math.round((memberTotal.done / memberTotal.target) * 100) + '%' : '—';
+    const totalRow = ['Total', '', '', totalQ, totalRate, ''];
+    if (opts.includeDescriptions) totalRow.push('');
+    bodyRows.push(totalRow);
+
+    const headRow2 = ['Sr. No.', 'Client', 'Task', 'Quantity', 'Rate', 'Status'];
+    if (opts.includeDescriptions) headRow2.push('Description');
+
+    // Banner row spans full width
+    const bannerCols = headRow2.length;
+
+    doc.autoTable({
+      startY: y,
+      head: [
+        [
+          { content: monthLabel, styles: { halign: 'center', fillColor: [250, 250, 250], textColor: [58, 45, 45], fontStyle: 'bold' } },
+          { content: (member.name || 'Member') + (member.role ? '  ·  ' + member.role : ''), colSpan: bannerCols - 1, styles: { halign: 'center', fillColor: [250, 250, 250], textColor: [58, 45, 45], fontStyle: 'bold', fontSize: 12 } },
+        ],
+        headRow2.map(h => ({ content: h, styles: { halign: 'center', fillColor: [236, 232, 224], textColor: [58, 45, 45], fontStyle: 'bold' } })),
+      ],
+      body: bodyRows,
+      margin: { left: margin, right: margin },
+      styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 6, lineColor: [196, 196, 196], lineWidth: 0.5, halign: 'center' },
+      alternateRowStyles: { fillColor: [253, 250, 245] },
+      columnStyles: {
+        0: { cellWidth: 50 },
+        1: { halign: 'center' },
+        2: { halign: 'left', cellWidth: opts.includeDescriptions ? 130 : 170 },
+        3: { halign: 'center', cellWidth: 60 },
+        4: { halign: 'center', cellWidth: 50 },
+        5: { halign: 'center', cellWidth: 70 },
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body') {
+          // Color status cell text
+          if (data.column.index === 5) {
+            const v = data.cell.raw;
+            if (v === 'Done') { data.cell.styles.textColor = [90, 128, 104]; data.cell.styles.fontStyle = 'bold'; }
+            else if (v === 'In progress') { data.cell.styles.textColor = [160, 122, 50]; data.cell.styles.fontStyle = 'bold'; }
+            else if (v === 'To do') { data.cell.styles.textColor = [107, 88, 86]; data.cell.styles.fontStyle = 'bold'; }
+            else if (v === 'Review') { data.cell.styles.textColor = [125, 99, 163]; data.cell.styles.fontStyle = 'bold'; }
+            else if (v === 'Blocked') { data.cell.styles.textColor = [217, 126, 156]; data.cell.styles.fontStyle = 'bold'; }
+          }
+          // Total row: coral tint background, bold, colored numbers
+          if (data.row.raw[0] === 'Total') {
+            data.cell.styles.fillColor = [250, 236, 231];
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.textColor = [58, 45, 45];
+            if (data.column.index === 3 || data.column.index === 4) {
+              data.cell.styles.textColor = [201, 112, 80];
+            }
+          }
+        }
+      },
+    });
   }
 
+  // Footer on all pages
   const pages = doc.internal.pages.length - 1;
-  for (let i = 1; i <= pages; i++) { doc.setPage(i); doc.setFont('helvetica', 'normal').setFontSize(8); doc.setTextColor(168, 155, 151); doc.text('Generated ' + new Date().toLocaleDateString() + ' · Studio with Sunny', margin, doc.internal.pageSize.getHeight() - 20); doc.text('Page ' + i + ' of ' + pages, pageW - margin - 50, doc.internal.pageSize.getHeight() - 20); }
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal').setFontSize(8);
+    doc.setTextColor(168, 155, 151);
+    doc.text('Generated ' + new Date().toLocaleDateString() + ' · Studio with Sunny', margin, pageH - 20);
+    if (pages > 1) doc.text('Page ' + i + ' of ' + pages, pageW - margin - 50, pageH - 20);
+  }
 
   const safeName = (member.name || 'member').replace(/[^a-z0-9]/gi, '_').toLowerCase();
   doc.save(safeName + '_' + periodLabel.toLowerCase().replace(/[^a-z0-9]/gi, '_') + '_' + today() + '.pdf');
@@ -845,74 +864,53 @@ function generateMemberReportPDF(member, memberTeam, memberTasks, clients, perio
 function exportMemberReportExcel(member, memberTeam, memberTasks, clients, periodLabel, opts) {
   opts = opts || { includeQty: true, groupByClient: true, includeDescriptions: false };
   const wb = XLSX.utils.book_new();
-  const completed = memberTasks.filter(t => t.status === 'done').length;
-  const inProgress = memberTasks.filter(t => t.status === 'progress').length;
-  const todo = memberTasks.filter(t => t.status === 'todo').length;
-  const review = memberTasks.filter(t => t.status === 'review').length;
-  const blocked = memberTasks.filter(t => t.status === 'blocked').length;
-  const onTime = memberTasks.filter(t => t.status === 'done' && t.dueDate && t.completedAt && t.completedAt <= t.dueDate).length;
-  const completionRate = memberTasks.length > 0 ? Math.round((completed / memberTasks.length) * 100) + '%' : '—';
-  const onTimeRate = completed > 0 ? Math.round((onTime / completed) * 100) + '%' : '—';
 
-  const summary = [
-    ['Individual Performance Report'],
-    [],
-    ['Name', member.name || ''],
-    ['Role', member.role || ''],
-    ['Team', memberTeam?.name || 'Unassigned'],
-    ['Email', member.email || ''],
-    ['WhatsApp', member.whatsapp || ''],
-    ['Period', periodLabel],
-    ['Generated', new Date().toLocaleDateString()],
-    [],
-    ['WORKLOAD'],
-    ['Total tasks', memberTasks.length],
-    ['Completed', completed],
-    ['In progress', inProgress],
-    ['To do', todo],
-    ['In review', review],
-    ['Blocked', blocked],
-    ['Completion rate', completionRate],
-    ['On-time rate', onTimeRate],
-  ];
-  const ws1 = XLSX.utils.aoa_to_sheet(summary);
-  ws1['!cols'] = [{ wch: 24 }, { wch: 22 }];
-  XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+  const monthLabel = (() => {
+    const firstDate = memberTasks.find(t => t.completedAt || t.assignedDate || t.createdAt);
+    if (firstDate) {
+      try { const d = new Date((firstDate.completedAt || firstDate.assignedDate || firstDate.createdAt).slice(0, 10) + 'T00:00:00'); return d.toLocaleString('en-US', { month: 'long' }); } catch {}
+    }
+    return periodLabel;
+  })();
 
-  // By client
-  const byClient = {};
-  memberTasks.forEach(t => {
-    const cName = clients.find(c => c.id === t.clientId)?.name || 'No client';
-    if (!byClient[cName]) byClient[cName] = { total: 0, done: 0 };
-    byClient[cName].total++;
-    if (t.status === 'done') byClient[cName].done++;
-  });
-  const clientRows = [['Client', 'Tasks', 'Completed', 'Completion Rate']];
-  Object.entries(byClient).sort((a, b) => b[1].total - a[1].total).forEach(([name, s]) => clientRows.push([name, s.total, s.done, s.total > 0 ? Math.round((s.done / s.total) * 100) + '%' : '—']));
-  const ws2 = XLSX.utils.aoa_to_sheet(clientRows);
-  ws2['!cols'] = [{ wch: 28 }, { wch: 10 }, { wch: 12 }, { wch: 16 }];
-  XLSX.utils.book_append_sheet(wb, ws2, 'By Client');
+  const taskQty = (t) => ({ target: t.quantityTarget || 0, done: t.quantityDone || 0 });
+  const sumQty = (list) => list.reduce((s, t) => { const q = taskQty(t); s.target += q.target; s.done += q.done; return s; }, { target: 0, done: 0 });
 
-  // All tasks
-  const taskHeaders = ['Title', 'Client', 'Status', 'Priority', 'Due Date', 'Created'];
-  if (opts.includeQty) taskHeaders.push('Done', 'Target');
-  if (opts.includeDescriptions) taskHeaders.push('Description');
-  const taskRows = [taskHeaders];
-  const sorted = [...memberTasks].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-  sorted.forEach(t => {
+  const sheetRows = [];
+  // Banner row: [Month, Member · Role, '', '', '', '']
+  sheetRows.push([monthLabel, (member.name || 'Member') + (member.role ? '  ·  ' + member.role : ''), '', '', '', '']);
+  // Column headers
+  const headers = ['Sr. No.', 'Client', 'Task', 'Quantity', 'Rate', 'Status'];
+  if (opts.includeDescriptions) headers.push('Description');
+  sheetRows.push(headers);
+
+  // Sort tasks done first
+  const statusOrder = { done: 0, progress: 1, review: 2, todo: 3, blocked: 4 };
+  const sorted = [...memberTasks].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
+
+  sorted.forEach((t, idx) => {
     const cName = clients.find(c => c.id === t.clientId)?.name || '';
+    const q = taskQty(t);
+    const qStr = q.target > 0 ? `${q.done} / ${q.target}` : (q.done > 0 ? String(q.done) : '');
+    const rate = q.target > 0 ? Math.round((q.done / q.target) * 100) + '%' : '';
     const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
-    const row = [t.title || '', cName, statusLabel, t.priority || '', t.dueDate ? formatDate(t.dueDate) : '', t.createdAt ? formatDate(t.createdAt) : ''];
-    if (opts.includeQty) row.push(t.quantityDone != null ? t.quantityDone : '', t.quantityTarget != null ? t.quantityTarget : '');
+    const row = [idx + 1, cName, t.title || '', qStr, rate, statusLabel];
     if (opts.includeDescriptions) row.push(t.description || '');
-    taskRows.push(row);
+    sheetRows.push(row);
   });
-  const ws3 = XLSX.utils.aoa_to_sheet(taskRows);
-  const colWidths = [{ wch: 50 }, { wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
-  if (opts.includeQty) colWidths.push({ wch: 8 }, { wch: 8 });
+  // Total row
+  const totals = sumQty(memberTasks);
+  const totalQ = totals.target > 0 ? `${totals.done} / ${totals.target}` : (totals.done > 0 ? String(totals.done) : '');
+  const totalRate = totals.target > 0 ? Math.round((totals.done / totals.target) * 100) + '%' : '';
+  const totalRow = ['Total', '', '', totalQ, totalRate, ''];
+  if (opts.includeDescriptions) totalRow.push('');
+  sheetRows.push(totalRow);
+
+  const ws = XLSX.utils.aoa_to_sheet(sheetRows);
+  const colWidths = [{ wch: 12 }, { wch: 22 }, { wch: 40 }, { wch: 14 }, { wch: 10 }, { wch: 14 }];
   if (opts.includeDescriptions) colWidths.push({ wch: 50 });
-  ws3['!cols'] = colWidths;
-  XLSX.utils.book_append_sheet(wb, ws3, 'Tasks');
+  ws['!cols'] = colWidths;
+  XLSX.utils.book_append_sheet(wb, ws, 'Report');
 
   const safeName = (member.name || 'member').replace(/[^a-z0-9]/gi, '_').toLowerCase();
   XLSX.writeFile(wb, safeName + '_' + periodLabel.toLowerCase().replace(/[^a-z0-9]/gi, '_') + '_' + today() + '.xlsx');
@@ -1034,12 +1032,17 @@ function generateCustomBundlePDF(opts) {
         body: summaryRows,
         margin: { left: margin, right: margin },
         styles: { font: 'helvetica', fontSize: 10, cellPadding: 7, lineColor: [196, 196, 196], lineWidth: 0.5 },
-        headStyles: { fillColor: [250, 250, 250], textColor: [58, 45, 45], fontStyle: 'bold' },
+        headStyles: { fillColor: [236, 232, 224], textColor: [58, 45, 45], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [253, 250, 245] },
         columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'center' }, 4: { halign: 'center' } },
         didParseCell: (data) => {
           if (data.row.raw[0] === 'Total') {
             data.cell.styles.fontStyle = 'bold';
-            data.cell.styles.fillColor = [250, 250, 250];
+            data.cell.styles.fillColor = [250, 236, 231];
+            data.cell.styles.textColor = [58, 45, 45];
+            if (data.column.index === 3 || data.column.index === 4) {
+              data.cell.styles.textColor = [201, 112, 80];
+            }
           }
         },
       });
@@ -1110,7 +1113,8 @@ function generateCustomBundlePDF(opts) {
           body: bodyRows,
           margin: { left: margin, right: margin },
           styles: { font: 'helvetica', fontSize: 9, cellPadding: 5, lineColor: [196, 196, 196], lineWidth: 0.5, halign: 'center' },
-          headStyles: { fillColor: [250, 250, 250], textColor: [58, 45, 45], fontStyle: 'bold' },
+          headStyles: { fillColor: [236, 232, 224], textColor: [58, 45, 45], fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [253, 250, 245] },
           columnStyles: {
             0: { cellWidth: 50 },
             1: { halign: 'center' },
@@ -1120,10 +1124,25 @@ function generateCustomBundlePDF(opts) {
             5: { halign: 'center', cellWidth: 65 },
           },
           didParseCell: (data) => {
-            // Bold "Total" row
-            if (data.section === 'body' && data.row.raw[0] === 'Total') {
-              data.cell.styles.fontStyle = 'bold';
-              data.cell.styles.fillColor = [250, 250, 250];
+            if (data.section === 'body') {
+              // Color status cell
+              if (data.column.index === 5) {
+                const v = data.cell.raw;
+                if (v === 'Done') { data.cell.styles.textColor = [90, 128, 104]; data.cell.styles.fontStyle = 'bold'; }
+                else if (v === 'In progress') { data.cell.styles.textColor = [160, 122, 50]; data.cell.styles.fontStyle = 'bold'; }
+                else if (v === 'To do') { data.cell.styles.textColor = [107, 88, 86]; data.cell.styles.fontStyle = 'bold'; }
+                else if (v === 'Review') { data.cell.styles.textColor = [125, 99, 163]; data.cell.styles.fontStyle = 'bold'; }
+                else if (v === 'Blocked') { data.cell.styles.textColor = [217, 126, 156]; data.cell.styles.fontStyle = 'bold'; }
+              }
+              // Total row
+              if (data.row.raw[0] === 'Total') {
+                data.cell.styles.fillColor = [250, 236, 231];
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.textColor = [58, 45, 45];
+                if (data.column.index === 3 || data.column.index === 4) {
+                  data.cell.styles.textColor = [201, 112, 80];
+                }
+              }
             }
           },
         });
