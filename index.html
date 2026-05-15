@@ -724,7 +724,8 @@ function exportTeamReportExcel(memberStats, teamStats, periodLabel, periodTasks)
   XLSX.writeFile(wb, 'team_report_' + periodLabel.toLowerCase().replace(/[^a-z0-9]/gi, '_') + '_' + today() + '.xlsx');
 }
 
-function generateMemberReportPDF(member, memberTeam, memberTasks, clients, periodLabel) {
+function generateMemberReportPDF(member, memberTeam, memberTasks, clients, periodLabel, opts) {
+  opts = opts || { includeQty: true, groupByClient: true, includeDescriptions: false };
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -814,18 +815,24 @@ function generateMemberReportPDF(member, memberTeam, memberTasks, clients, perio
     doc.setFont('helvetica', 'bold').setFontSize(14);
     doc.text('All tasks in period', margin, y); y += 14;
     const sorted = [...memberTasks].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const extraHeads = [];
+    if (opts.includeQty) extraHeads.push('Done', 'Target');
+    if (opts.includeDescriptions) extraHeads.push('Description');
     const taskRows = sorted.map(t => {
       const cName = clients.find(c => c.id === t.clientId)?.name || '—';
       const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
-      return [
+      const row = [
         (t.title || '').slice(0, 50) + ((t.title || '').length > 50 ? '…' : ''),
         cName,
         statusLabel,
         t.priority || '—',
         t.dueDate ? formatDate(t.dueDate) : '—',
       ];
+      if (opts.includeQty) row.push(t.quantityDone != null ? String(t.quantityDone) : '—', t.quantityTarget != null ? String(t.quantityTarget) : '—');
+      if (opts.includeDescriptions) row.push((t.description || '').slice(0, 90));
+      return row;
     });
-    doc.autoTable({ startY: y, head: [['Task', 'Client', 'Status', 'Priority', 'Due']], body: taskRows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 6 }, headStyles: { fillColor: [ar, ag, ab], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] }, columnStyles: { 0: { cellWidth: 180 } } });
+    doc.autoTable({ startY: y, head: [['Task', 'Client', 'Status', 'Priority', 'Due', ...extraHeads]], body: taskRows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 6 }, headStyles: { fillColor: [ar, ag, ab], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] }, columnStyles: { 0: { cellWidth: opts.includeDescriptions ? 130 : 180 } } });
   }
 
   const pages = doc.internal.pages.length - 1;
@@ -835,7 +842,8 @@ function generateMemberReportPDF(member, memberTeam, memberTasks, clients, perio
   doc.save(safeName + '_' + periodLabel.toLowerCase().replace(/[^a-z0-9]/gi, '_') + '_' + today() + '.pdf');
 }
 
-function exportMemberReportExcel(member, memberTeam, memberTasks, clients, periodLabel) {
+function exportMemberReportExcel(member, memberTeam, memberTasks, clients, periodLabel, opts) {
+  opts = opts || { includeQty: true, groupByClient: true, includeDescriptions: false };
   const wb = XLSX.utils.book_new();
   const completed = memberTasks.filter(t => t.status === 'done').length;
   const inProgress = memberTasks.filter(t => t.status === 'progress').length;
@@ -886,15 +894,24 @@ function exportMemberReportExcel(member, memberTeam, memberTasks, clients, perio
   XLSX.utils.book_append_sheet(wb, ws2, 'By Client');
 
   // All tasks
-  const taskRows = [['Title', 'Client', 'Status', 'Priority', 'Due Date', 'Created']];
+  const taskHeaders = ['Title', 'Client', 'Status', 'Priority', 'Due Date', 'Created'];
+  if (opts.includeQty) taskHeaders.push('Done', 'Target');
+  if (opts.includeDescriptions) taskHeaders.push('Description');
+  const taskRows = [taskHeaders];
   const sorted = [...memberTasks].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   sorted.forEach(t => {
     const cName = clients.find(c => c.id === t.clientId)?.name || '';
     const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
-    taskRows.push([t.title || '', cName, statusLabel, t.priority || '', t.dueDate ? formatDate(t.dueDate) : '', t.createdAt ? formatDate(t.createdAt) : '']);
+    const row = [t.title || '', cName, statusLabel, t.priority || '', t.dueDate ? formatDate(t.dueDate) : '', t.createdAt ? formatDate(t.createdAt) : ''];
+    if (opts.includeQty) row.push(t.quantityDone != null ? t.quantityDone : '', t.quantityTarget != null ? t.quantityTarget : '');
+    if (opts.includeDescriptions) row.push(t.description || '');
+    taskRows.push(row);
   });
   const ws3 = XLSX.utils.aoa_to_sheet(taskRows);
-  ws3['!cols'] = [{ wch: 50 }, { wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+  const colWidths = [{ wch: 50 }, { wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+  if (opts.includeQty) colWidths.push({ wch: 8 }, { wch: 8 });
+  if (opts.includeDescriptions) colWidths.push({ wch: 50 });
+  ws3['!cols'] = colWidths;
   XLSX.utils.book_append_sheet(wb, ws3, 'Tasks');
 
   const safeName = (member.name || 'member').replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -2886,6 +2903,7 @@ function TaskRow({ task, team, teams, clients, compact, onClick, onStatusChange 
 function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAddTeam, onEditTeam, onAddTask, onEditTask, onQuickStatus, onDeleteTask }) {
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [selectedMemberId, setSelectedMemberId] = useState(null);
+  const [reportMember, setReportMember] = useState(null);
   const sortedTeams = [...teams].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
   // If a member is selected, show their profile (regardless of team filter)
@@ -2896,18 +2914,22 @@ function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAd
       setSelectedMemberId(null);
       return null;
     }
-    return <MemberProfile
-      member={member}
-      memberTeam={teams.find(t => t.id === member.teamId)}
-      tasks={tasks.filter(t => t.assigneeId === member.id)}
-      clients={clients}
-      onBack={() => setSelectedMemberId(null)}
-      onEditMember={() => onEditMember(member)}
-      onAddTask={() => onAddTask(member.id)}
-      onEditTask={onEditTask}
-      onQuickStatus={onQuickStatus}
-      onDeleteTask={onDeleteTask}
-    />;
+    return <>
+      <MemberProfile
+        member={member}
+        memberTeam={teams.find(t => t.id === member.teamId)}
+        tasks={tasks.filter(t => t.assigneeId === member.id)}
+        clients={clients}
+        onBack={() => setSelectedMemberId(null)}
+        onEditMember={() => onEditMember(member)}
+        onAddTask={() => onAddTask(member.id)}
+        onEditTask={onEditTask}
+        onQuickStatus={onQuickStatus}
+        onDeleteTask={onDeleteTask}
+        onOpenReport={() => setReportMember(member)}
+      />
+      {reportMember && <MemberReportModal member={reportMember} memberTeam={teams.find(t => t.id === reportMember.teamId)} allTasks={tasks.filter(t => t.assigneeId === reportMember.id)} clients={clients} onClose={() => setReportMember(null)} />}
+    </>;
   }
 
   if (selectedTeamId === null) {
@@ -2943,11 +2965,10 @@ function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAd
       <PageHeader title={titleText} subtitle={selectedTeam?.description || `${members.length} ${members.length === 1 ? 'member' : 'members'}`} action={<div className="flex gap-2">{isManaged && <button className="btn-ghost" onClick={() => onEditTeam(selectedTeam)}><Edit2 size={12} /> Edit team</button>}<button className="btn-primary" onClick={onAddMember}><Plus size={14} /> Add member</button></div>} />
       {members.length === 0 ? <EmptyState title="No members yet" message="add the first person to this crew!" action={onAddMember} actionLabel="Add member" mood="happy" /> : (
         <div className="grid grid-cols-3 gap-3">
-          {members.map(m => { const memberTasks = tasks.filter(t => t.assigneeId === m.id); const active = memberTasks.filter(t => t.status !== 'done').length; const done = memberTasks.filter(t => t.status === 'done').length; const memberTeam = teams.find(t => t.id === m.teamId); const avatarBg = memberTeam?.color || 'var(--coral)'; const periodTasks = memberTasks.filter(t => isInPeriod(t.createdAt, 'month')); const dlPDF = (e) => { e.stopPropagation(); generateMemberReportPDF(m, memberTeam, periodTasks, clients || [], 'Last 30 days'); }; const dlExcel = (e) => { e.stopPropagation(); exportMemberReportExcel(m, memberTeam, periodTasks, clients || [], 'Last 30 days'); }; return (
+          {members.map(m => { const memberTasks = tasks.filter(t => t.assigneeId === m.id); const active = memberTasks.filter(t => t.status !== 'done').length; const done = memberTasks.filter(t => t.status === 'done').length; const memberTeam = teams.find(t => t.id === m.teamId); const avatarBg = memberTeam?.color || 'var(--coral)'; const openReport = (e) => { e.stopPropagation(); setReportMember(m); }; return (
             <button key={m.id} onClick={() => setSelectedMemberId(m.id)} className="card card-hover" style={{ textAlign: 'left', position: 'relative' }}>
               <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
-                <span role="button" tabIndex={0} aria-label="Download PDF report" title="Download PDF · last 30 days" onClick={dlPDF} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') dlPDF(e); }} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--coral-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--coral)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--coral-soft)'}><FileText size={12} color="var(--coral-deep)" /></span>
-                <span role="button" tabIndex={0} aria-label="Download Excel report" title="Download Excel · last 30 days" onClick={dlExcel} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') dlExcel(e); }} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--sage-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--sage)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--sage-soft)'}><FileSpreadsheet size={12} color="#5a8068" /></span>
+                <span role="button" tabIndex={0} aria-label="Generate report" title="Generate custom report" onClick={openReport} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openReport(e); }} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--coral-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--coral)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--coral-soft)'}><FileText size={12} color="var(--coral-deep)" /></span>
               </div>
               <div className="flex items-center gap-3 mb-4" style={{ paddingRight: 64 }}>
                 <div style={{ width: 46, height: 46, borderRadius: '50%', background: avatarBg + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', color: avatarBg, fontSize: 17, fontWeight: 600, flexShrink: 0 }}>{m.name[0]?.toUpperCase()}</div>
@@ -2964,12 +2985,206 @@ function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAd
           ); })}
         </div>
       )}
+      {reportMember && <MemberReportModal member={reportMember} memberTeam={teams.find(t => t.id === reportMember.teamId)} allTasks={tasks.filter(t => t.assigneeId === reportMember.id)} clients={clients} onClose={() => setReportMember(null)} />}
+    </div>
+  );
+}
+
+// ====== MEMBER REPORT MODAL ======
+function MemberReportModal({ member, memberTeam, allTasks, clients, onClose }) {
+  // Load saved preferences from localStorage
+  const loadPref = (key, fallback) => {
+    try { const v = localStorage.getItem('reportPref_' + key); return v == null ? fallback : JSON.parse(v); } catch { return fallback; }
+  };
+  const savePref = (key, val) => { try { localStorage.setItem('reportPref_' + key, JSON.stringify(val)); } catch {} };
+
+  const [rangeKey, setRangeKey] = useState(loadPref('range', 'last30'));
+  const [customStart, setCustomStart] = useState(loadPref('customStart', ''));
+  const [customEnd, setCustomEnd] = useState(loadPref('customEnd', today()));
+  const [statusFilter, setStatusFilter] = useState(loadPref('status', 'all'));
+  const [clientFilter, setClientFilter] = useState(loadPref('client', 'all'));
+  const [includeQty, setIncludeQty] = useState(loadPref('qty', true));
+  const [groupByClient, setGroupByClient] = useState(loadPref('group', true));
+  const [includeDescriptions, setIncludeDescriptions] = useState(loadPref('descs', false));
+  const [format, setFormat] = useState(loadPref('format', 'pdf'));
+
+  // Compute date range based on preset or custom
+  const todayDate = new Date();
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const { start, end, label } = (() => {
+    const t = new Date(todayDate);
+    if (rangeKey === 'today') return { start: ymd(t), end: ymd(t), label: 'Today' };
+    if (rangeKey === 'thisWeek') { const d = new Date(t); d.setDate(t.getDate() - t.getDay()); return { start: ymd(d), end: ymd(t), label: 'This week' }; }
+    if (rangeKey === 'last30') { const d = new Date(t); d.setDate(t.getDate() - 30); return { start: ymd(d), end: ymd(t), label: 'Last 30 days' }; }
+    if (rangeKey === 'thisMonth') return { start: `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-01`, end: ymd(t), label: 'This month' };
+    if (rangeKey === 'lastMonth') { const d = new Date(t.getFullYear(), t.getMonth() - 1, 1); const endD = new Date(t.getFullYear(), t.getMonth(), 0); return { start: ymd(d), end: ymd(endD), label: 'Last month' }; }
+    if (rangeKey === 'thisQuarter') { const q = Math.floor(t.getMonth() / 3); const d = new Date(t.getFullYear(), q * 3, 1); return { start: ymd(d), end: ymd(t), label: 'This quarter' }; }
+    if (rangeKey === 'thisYear') return { start: `${t.getFullYear()}-01-01`, end: ymd(t), label: 'This year' };
+    if (rangeKey === 'allTime') return { start: '2000-01-01', end: ymd(t), label: 'All time' };
+    // custom
+    return { start: customStart || '2000-01-01', end: customEnd || ymd(t), label: customStart && customEnd ? `${formatDate(customStart)} – ${formatDate(customEnd)}` : 'Custom' };
+  })();
+
+  // Filter tasks by all the criteria
+  const filtered = allTasks.filter(t => {
+    // Date: use completedAt for done tasks, otherwise assignedDate, otherwise createdAt
+    const taskDate = (t.completedAt || t.assignedDate || t.createdAt || '').slice(0, 10);
+    if (taskDate < start || taskDate > end) return false;
+    if (statusFilter === 'done' && t.status !== 'done') return false;
+    if (statusFilter === 'active' && t.status === 'done') return false;
+    if (clientFilter !== 'all' && t.clientId !== clientFilter) return false;
+    return true;
+  });
+
+  const totalQtyTarget = filtered.reduce((s, t) => s + (t.quantityTarget || 0), 0);
+  const totalQtyDone = filtered.reduce((s, t) => s + (t.quantityDone || 0), 0);
+
+  // Persist whatever changes
+  const handleSave = (key, val, setter) => { setter(val); savePref(key, val); };
+
+  const handleGenerate = () => {
+    if (filtered.length === 0) { alert('No tasks match these filters. Try widening the date range.'); return; }
+    savePref('range', rangeKey);
+    savePref('status', statusFilter);
+    savePref('client', clientFilter);
+    savePref('qty', includeQty);
+    savePref('group', groupByClient);
+    savePref('descs', includeDescriptions);
+    savePref('format', format);
+    if (rangeKey === 'custom') { savePref('customStart', customStart); savePref('customEnd', customEnd); }
+    const opts = { includeQty, groupByClient, includeDescriptions };
+    if (format === 'pdf' || format === 'both') generateMemberReportPDF(member, memberTeam, filtered, clients || [], label, opts);
+    if (format === 'excel' || format === 'both') exportMemberReportExcel(member, memberTeam, filtered, clients || [], label, opts);
+    onClose();
+  };
+
+  const clientCounts = {};
+  allTasks.forEach(t => { if (t.clientId) clientCounts[t.clientId] = (clientCounts[t.clientId] || 0) + 1; });
+  const usedClients = (clients || []).filter(c => clientCounts[c.id]);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(58,45,45,0.3)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }} onClick={onClose}>
+      <div className="card scale-in" style={{ maxWidth: 560, width: '100%', maxHeight: '92vh', overflow: 'auto', padding: 22 }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start gap-3 pb-4 mb-4" style={{ borderBottom: '1px solid var(--line)' }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--coral-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><FileText size={16} color="var(--coral-deep)" /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 className="display" style={{ fontSize: '1.2rem', fontWeight: 500, margin: 0, lineHeight: 1.1 }}>Generate report — {member.name}</h2>
+            <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', margin: '2px 0 0' }}>customize what's included ✨</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', fontSize: 18, cursor: 'pointer', padding: 4, lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* Time range */}
+        <div className="mb-4">
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4 }}>TIME RANGE</p>
+          <div className="flex gap-1.5 flex-wrap mb-2">
+            {[
+              { id: 'today', label: 'Today' }, { id: 'thisWeek', label: 'This week' }, { id: 'last30', label: 'Last 30 days' },
+              { id: 'thisMonth', label: 'This month' }, { id: 'lastMonth', label: 'Last month' }, { id: 'thisQuarter', label: 'This quarter' },
+              { id: 'thisYear', label: 'This year' }, { id: 'allTime', label: 'All time' }, { id: 'custom', label: 'Custom...' },
+            ].map(p => (
+              <Pill key={p.id} label={p.label} active={rangeKey === p.id} onClick={() => handleSave('range', p.id, setRangeKey)} />
+            ))}
+          </div>
+          {rangeKey === 'custom' ? (
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <Field label="Start"><input type="date" className="input-field" value={customStart} onChange={e => handleSave('customStart', e.target.value, setCustomStart)} /></Field>
+              <Field label="End"><input type="date" className="input-field" value={customEnd} onChange={e => handleSave('customEnd', e.target.value, setCustomEnd)} /></Field>
+            </div>
+          ) : (
+            <p className="text-xs italic" style={{ color: 'var(--ink-soft)', margin: 0 }}>selected range: <strong>{formatDate(start)} → {formatDate(end)}</strong></p>
+          )}
+        </div>
+
+        {/* Filters */}
+        <div className="mb-4">
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4 }}>WHAT TO INCLUDE</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Tasks">
+              <select className="input-field" value={statusFilter} onChange={e => handleSave('status', e.target.value, setStatusFilter)}>
+                <option value="all">All tasks</option>
+                <option value="done">Done only</option>
+                <option value="active">Active only (todo + in progress)</option>
+              </select>
+            </Field>
+            <Field label="Client">
+              <select className="input-field" value={clientFilter} onChange={e => handleSave('client', e.target.value, setClientFilter)}>
+                <option value="all">All clients</option>
+                {usedClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+          </div>
+        </div>
+
+        {/* Toggles */}
+        <div className="mb-4 p-3" style={{ background: 'var(--bg-warmer)', borderRadius: 10 }}>
+          <ToggleRow label="Include quantities" hint="(target / done numbers)" checked={includeQty} onChange={v => handleSave('qty', v, setIncludeQty)} />
+          <ToggleRow label="Group by client" hint="(cleaner layout)" checked={groupByClient} onChange={v => handleSave('group', v, setGroupByClient)} />
+          <ToggleRow label="Include task descriptions" hint="(longer report)" checked={includeDescriptions} onChange={v => handleSave('descs', v, setIncludeDescriptions)} />
+        </div>
+
+        {/* Format */}
+        <div className="mb-4">
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4 }}>FORMAT</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[{ id: 'pdf', emoji: '📄', label: 'PDF' }, { id: 'excel', emoji: '📊', label: 'Excel' }, { id: 'both', emoji: '📄📊', label: 'Both' }].map(f => (
+              <button key={f.id} onClick={() => handleSave('format', f.id, setFormat)} style={{
+                background: format === f.id ? 'var(--coral-soft)' : 'white',
+                border: `2px solid ${format === f.id ? 'var(--coral)' : 'var(--line)'}`,
+                color: format === f.id ? 'var(--coral-deep)' : 'var(--ink-soft)',
+                padding: 9, borderRadius: 10, fontSize: 12,
+                fontWeight: format === f.id ? 600 : 500,
+                cursor: 'pointer', textAlign: 'center', lineHeight: 1.4,
+              }}>{f.emoji}<br />{f.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Live summary */}
+        <div className="mb-4 p-3" style={{ background: '#f9f5ee', borderLeft: '3px solid var(--coral)', borderRadius: 6 }}>
+          <p className="text-xs" style={{ color: 'var(--ink-soft)', margin: 0, lineHeight: 1.55 }}>
+            <strong>Preview:</strong> {member.name} · {label} · {filtered.length} {filtered.length === 1 ? 'task' : 'tasks'}
+            {includeQty && totalQtyTarget > 0 && ` · ${totalQtyDone} of ${totalQtyTarget} deliverables`}
+            {groupByClient && ' · grouped by client'}
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-4" style={{ borderTop: '1px solid var(--line)' }}>
+          <button onClick={onClose} className="btn-ghost" style={{ flex: 1 }}>Cancel</button>
+          <button onClick={handleGenerate} className="btn-primary" style={{ flex: 2 }} disabled={filtered.length === 0}>
+            <Download size={13} /> Generate &amp; download
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ToggleRow({ label, hint, checked, onChange }) {
+  return (
+    <div className="flex items-center gap-3 py-1.5">
+      <button onClick={() => onChange(!checked)} style={{
+        width: 34, height: 18, background: checked ? 'var(--coral)' : 'var(--line)',
+        borderRadius: 999, border: 'none', cursor: 'pointer', position: 'relative',
+        transition: 'background 0.15s', flexShrink: 0,
+      }}>
+        <span style={{
+          position: 'absolute', left: checked ? 18 : 2, top: 2,
+          width: 14, height: 14, background: 'white', borderRadius: '50%',
+          transition: 'left 0.15s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+        }}></span>
+      </button>
+      <p className="text-sm" style={{ margin: 0, flex: 1 }}>
+        <strong>{label}</strong>{hint && <span style={{ color: 'var(--ink-soft)', fontWeight: 400 }}> {hint}</span>}
+      </p>
     </div>
   );
 }
 
 // ====== MEMBER PROFILE ======
-function MemberProfile({ member, memberTeam, tasks, clients, onBack, onEditMember, onAddTask, onEditTask, onQuickStatus, onDeleteTask }) {
+function MemberProfile({ member, memberTeam, tasks, clients, onBack, onEditMember, onAddTask, onEditTask, onQuickStatus, onDeleteTask, onOpenReport }) {
   const [tab, setTab] = useState('tasks');
   const [statusFilter, setStatusFilter] = useState('all');
   const [openMenu, setOpenMenu] = useState(null);
@@ -3022,6 +3237,7 @@ function MemberProfile({ member, memberTeam, tasks, clients, onBack, onEditMembe
         </div>
         <div className="flex gap-2">
           <button onClick={onEditMember} className="btn-ghost" style={{ fontSize: 12 }}><Edit2 size={12} /> Edit info</button>
+          <button onClick={onOpenReport} style={{ background: 'var(--coral-soft)', color: 'var(--coral-deep)', border: 'none', padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><FileText size={12} style={{ display: 'inline', marginRight: 4 }} /> Report</button>
         </div>
       </div>
 
