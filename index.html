@@ -969,195 +969,161 @@ function generateCustomBundlePDF(opts) {
   const ensureSpace = (h) => { if (y + h > pageH - 60) { doc.addPage(); y = margin; } };
   const sectionHeader = (title, subtitle) => { ensureSpace(40); doc.setTextColor(58, 45, 45); doc.setFont('helvetica', 'bold').setFontSize(14); doc.text(title, margin, y); if (subtitle) { y += 14; doc.setFont('helvetica', 'normal').setFontSize(9); doc.setTextColor(168, 155, 151); doc.text(subtitle, margin, y); } y += 12; };
 
-  // Helpers for quantity totals
+  // Quantity helpers
   const taskQty = (t) => ({ target: t.quantityTarget || 0, done: t.quantityDone || 0 });
   const sumQty = (taskList) => taskList.reduce((s, t) => { const q = taskQty(t); s.target += q.target; s.done += q.done; return s; }, { target: 0, done: 0 });
   const qtyDisplay = (q) => q.target > 0 ? `${q.done} / ${q.target}` : (q.done > 0 ? `${q.done}` : '—');
+  const rateDisplay = (q) => q.target > 0 ? Math.round((q.done / q.target) * 100) + '%' : (q.done > 0 ? '—' : '—');
 
-  // Filter by team if specified
-  const teamFilter = opts.teamFilter;  // optional team_id to restrict scope
-  if (teamFilter) {
-    const teamMemberIds = team.filter(m => m.teamId === teamFilter).map(m => m.id);
-    // rangeTasks is computed above this point; re-filter
-  }
+  // Month label from the 'from' date
+  const monthLabel = (() => {
+    try { const d = new Date(from + 'T00:00:00'); return d.toLocaleString('en-US', { month: 'long' }); } catch { return ''; }
+  })();
 
-  // Tasks section — GROUPED BY TEAM
+  // Team filter (optional — set when called from per-team report flow)
+  const teamFilter = opts.teamFilter;
+
+  // ====== TASKS — Total Summary + per-team + per-member blocks ======
   if (includes.tasks && rangeTasks.length > 0) {
-    // Tasks filtered to scope (team filter if set)
+    // Filter to team scope if set
     let scopedTasks = rangeTasks;
     if (teamFilter) {
       const teamMemberIds = team.filter(m => m.teamId === teamFilter).map(m => m.id);
       scopedTasks = rangeTasks.filter(t => teamMemberIds.includes(t.assigneeId));
     }
 
-    sectionHeader('Tasks', scopedTasks.length + ' tasks · grouped by team');
-
-    // ===== #1: Top "By team" summary table =====
-    // Build per-team aggregates
+    // Build team groups
     const teamGroups = {};
-    teams.forEach(tm => { teamGroups[tm.id] = { team: tm, members: [], tasks: [], qty: { target: 0, done: 0 } }; });
-    teamGroups['__no_team__'] = { team: { id: null, name: 'No team', color: '#a89b97' }, members: [], tasks: [], qty: { target: 0, done: 0 } };
-
+    teams.forEach(tm => { teamGroups[tm.id] = { team: tm, members: [], tasks: [] }; });
+    teamGroups['__no_team__'] = { team: { id: null, name: 'No team' }, members: [], tasks: [] };
     team.forEach(m => {
-      const key = m.teamId || '__no_team__';
-      if (!teamGroups[key]) teamGroups[key] = { team: { id: m.teamId, name: 'No team', color: '#a89b97' }, members: [], tasks: [], qty: { target: 0, done: 0 } };
-      teamGroups[key].members.push(m);
+      const k = m.teamId || '__no_team__';
+      if (!teamGroups[k]) teamGroups[k] = { team: { id: m.teamId, name: 'No team' }, members: [], tasks: [] };
+      teamGroups[k].members.push(m);
     });
-
     scopedTasks.forEach(t => {
       const member = team.find(m => m.id === t.assigneeId);
-      const key = member?.teamId || '__no_team__';
-      if (!teamGroups[key]) teamGroups[key] = { team: { id: member?.teamId, name: 'No team', color: '#a89b97' }, members: [], tasks: [], qty: { target: 0, done: 0 } };
-      teamGroups[key].tasks.push(t);
-      const q = taskQty(t);
-      teamGroups[key].qty.target += q.target;
-      teamGroups[key].qty.done += q.done;
+      const k = member?.teamId || '__no_team__';
+      if (!teamGroups[k]) teamGroups[k] = { team: { id: member?.teamId, name: 'No team' }, members: [], tasks: [] };
+      teamGroups[k].tasks.push(t);
     });
+    // Only teams that have tasks in the range
+    const teamsWithData = Object.values(teamGroups).filter(g => g.tasks.length > 0).sort((a, b) => b.tasks.length - a.tasks.length);
 
-    // Filter to only teams with members AND tasks for the summary table
-    const teamsWithData = Object.values(teamGroups).filter(g => g.tasks.length > 0 || g.members.length > 0);
-    teamsWithData.sort((a, b) => b.tasks.length - a.tasks.length);
+    // ===== TOTAL SUMMARY table =====
+    if (!teamFilter) {
+      // (For per-team reports, the summary would be a single-row table — not useful, skip it.)
+      sectionHeader('Total Summary');
+      const summaryRows = teamsWithData.map(g => {
+        const q = sumQty(g.tasks);
+        return [g.team.name, String(g.members.length), String(g.tasks.length), qtyDisplay(q), rateDisplay(q)];
+      });
+      // Grand total
+      const grand = teamsWithData.reduce((acc, g) => {
+        const q = sumQty(g.tasks);
+        acc.members += g.members.length; acc.tasks += g.tasks.length; acc.qDone += q.done; acc.qTarget += q.target;
+        return acc;
+      }, { members: 0, tasks: 0, qDone: 0, qTarget: 0 });
+      summaryRows.push(['Total', String(grand.members), String(grand.tasks),
+        grand.qTarget > 0 ? `${grand.qDone} / ${grand.qTarget}` : (grand.qDone > 0 ? String(grand.qDone) : '—'),
+        grand.qTarget > 0 ? Math.round((grand.qDone / grand.qTarget) * 100) + '%' : '—']);
 
-    // Summary table
-    ensureSpace(80);
-    doc.setTextColor(58, 45, 45);
-    doc.setFont('helvetica', 'bold').setFontSize(11);
-    doc.text('By team — overview', margin, y); y += 4;
-    const summaryRows = teamsWithData.map(g => {
-      const done = g.tasks.filter(t => t.status === 'done').length;
-      const rate = g.tasks.length > 0 ? Math.round((done / g.tasks.length) * 100) + '%' : '—';
-      return [g.team.name, String(g.members.length), String(g.tasks.length), String(done), qtyDisplay(g.qty), rate];
-    });
-    // Add TOTAL row
-    const grandTotal = teamsWithData.reduce((acc, g) => {
-      acc.members += g.members.length;
-      acc.tasks += g.tasks.length;
-      acc.done += g.tasks.filter(t => t.status === 'done').length;
-      acc.qtyDone += g.qty.done;
-      acc.qtyTarget += g.qty.target;
-      return acc;
-    }, { members: 0, tasks: 0, done: 0, qtyDone: 0, qtyTarget: 0 });
-    const grandRate = grandTotal.tasks > 0 ? Math.round((grandTotal.done / grandTotal.tasks) * 100) + '%' : '—';
-    summaryRows.push(['TOTAL', String(grandTotal.members), String(grandTotal.tasks), String(grandTotal.done), grandTotal.qtyTarget > 0 ? `${grandTotal.qtyDone} / ${grandTotal.qtyTarget}` : (grandTotal.qtyDone > 0 ? String(grandTotal.qtyDone) : '—'), grandRate]);
-
-    doc.autoTable({
-      startY: y + 4,
-      head: [['Team', 'Members', 'Tasks', 'Done', 'Deliverables', 'Rate']],
-      body: summaryRows,
-      margin: { left: margin, right: margin },
-      styles: { font: 'helvetica', fontSize: 9, cellPadding: 6 },
-      headStyles: { fillColor: [58, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [253, 248, 241] },
-      didParseCell: (data) => {
-        // Bold + tinted background for TOTAL row
-        if (data.row.raw[0] === 'TOTAL') {
-          data.cell.styles.fontStyle = 'bold';
-          data.cell.styles.fillColor = [250, 236, 231];
-          data.cell.styles.textColor = [58, 45, 45];
-        }
-      },
-    });
-    y = doc.lastAutoTable.finalY + 20;
+      doc.autoTable({
+        startY: y,
+        head: [['Team', 'Members', 'Tasks', 'Quantity', 'Rate']],
+        body: summaryRows,
+        margin: { left: margin, right: margin },
+        styles: { font: 'helvetica', fontSize: 10, cellPadding: 7, lineColor: [196, 196, 196], lineWidth: 0.5 },
+        headStyles: { fillColor: [250, 250, 250], textColor: [58, 45, 45], fontStyle: 'bold' },
+        columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'center' }, 4: { halign: 'center' } },
+        didParseCell: (data) => {
+          if (data.row.raw[0] === 'Total') {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [250, 250, 250];
+          }
+        },
+      });
+      y = doc.lastAutoTable.finalY + 28;
+    }
 
     // ===== Per-team sections =====
     teamsWithData.forEach(group => {
-      if (group.tasks.length === 0) return; // skip empty teams
       ensureSpace(80);
 
-      // Convert team color hex to RGB
-      const teamHex = group.team.color || '#c97050';
-      const teamRgb = hexToRgb(teamHex);
+      // Team name heading
+      doc.setTextColor(58, 45, 45);
+      doc.setFont('helvetica', 'bold').setFontSize(14);
+      doc.text(group.team.name, margin, y);
+      y += 18;
 
-      // Team band
-      doc.setFillColor(teamRgb[0], teamRgb[1], teamRgb[2]);
-      doc.setDrawColor(teamRgb[0], teamRgb[1], teamRgb[2]);
-      doc.rect(margin, y, 3, 24, 'F');
-      doc.setTextColor(teamRgb[0], teamRgb[1], teamRgb[2]);
-      doc.setFont('helvetica', 'bold').setFontSize(13);
-      doc.text(group.team.name.toUpperCase(), margin + 10, y + 12);
-      doc.setFont('helvetica', 'normal').setFontSize(9);
-      doc.setTextColor(107, 88, 86);
-      const teamDone = group.tasks.filter(t => t.status === 'done').length;
-      const subline = `${group.members.length} members · ${group.tasks.length} tasks · ${teamDone} done` +
-        (group.qty.target > 0 || group.qty.done > 0 ? ` · ${qtyDisplay(group.qty)} deliverables` : '');
-      doc.text(subline, margin + 10, y + 22);
-      y += 32;
+      // Members in this team with tasks
+      const membersWithTasks = group.members.map(m => ({
+        member: m,
+        tasks: group.tasks.filter(t => t.assigneeId === m.id),
+      })).filter(x => x.tasks.length > 0).sort((a, b) => b.tasks.length - a.tasks.length);
 
-      // ===== #2: Per-team member breakdown table =====
-      const membersWithTasks = group.members.map(m => {
-        const mt = group.tasks.filter(t => t.assigneeId === m.id);
-        const mDone = mt.filter(t => t.status === 'done').length;
-        const mq = sumQty(mt);
-        return { member: m, tasks: mt, done: mDone, qty: mq };
-      }).filter(x => x.tasks.length > 0).sort((a, b) => b.tasks.length - a.tasks.length);
+      // Unassigned tasks in this team (assignee not found in members list)
+      const unassignedTasks = group.tasks.filter(t => !group.members.some(m => m.id === t.assigneeId));
+      if (unassignedTasks.length > 0) membersWithTasks.push({ member: { name: 'Unassigned', role: '' }, tasks: unassignedTasks });
 
-      if (membersWithTasks.length > 1) {
-        ensureSpace(40);
-        doc.setFont('helvetica', 'bold').setFontSize(10);
-        doc.setTextColor(58, 45, 45);
-        doc.text('Members at a glance', margin + 6, y); y += 4;
-        const breakdownRows = membersWithTasks.map(x => {
-          const rate = x.tasks.length > 0 ? Math.round((x.done / x.tasks.length) * 100) + '%' : '—';
-          return [x.member.name, String(x.tasks.length), String(x.done), qtyDisplay(x.qty), rate];
-        });
-        doc.autoTable({
-          startY: y + 4,
-          head: [['Member', 'Tasks', 'Done', 'Deliverables', 'Rate']],
-          body: breakdownRows,
-          margin: { left: margin + 6, right: margin },
-          styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 },
-          headStyles: { fillColor: [teamRgb[0], teamRgb[1], teamRgb[2]], textColor: [255, 255, 255], fontStyle: 'bold' },
-          alternateRowStyles: { fillColor: [253, 248, 241] },
-        });
-        y = doc.lastAutoTable.finalY + 14;
-      }
+      // One block per member
+      membersWithTasks.forEach(({ member, tasks: mTasks }) => {
+        ensureSpace(60);
 
-      // ===== Per-member task tables =====
-      membersWithTasks.forEach(({ member, tasks: mTasks, qty: mQty }) => {
-        ensureSpace(80);
-        doc.setFont('helvetica', 'bold').setFontSize(10);
-        doc.setTextColor(58, 45, 45);
-        const memberLabel = `${member.name}${member.role ? ' · ' + member.role : ''}`;
-        doc.text(memberLabel, margin + 6, y);
-        doc.setFont('helvetica', 'normal').setFontSize(9);
-        doc.setTextColor(107, 88, 86);
-        const mDone = mTasks.filter(t => t.status === 'done').length;
-        const memberMeta = `${mTasks.length} tasks · ${mDone} done` + (mQty.target > 0 ? ` · ${qtyDisplay(mQty)} deliverables` : '');
-        // Right-aligned meta
-        const metaWidth = doc.getTextWidth(memberMeta);
-        doc.text(memberMeta, pageW - margin - metaWidth, y);
-        y += 8;
+        // Sort tasks: done first, then in progress, then todo
+        const statusOrder = { done: 0, progress: 1, review: 2, todo: 3, blocked: 4 };
+        const sortedTasks = [...mTasks].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
 
-        const taskRows = mTasks.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(t => {
-          const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
+        // Build rows: [Sr.No, Client, Task, Quantity, Rate, Status]
+        const bodyRows = sortedTasks.map((t, idx) => {
           const q = taskQty(t);
-          const qStr = q.target > 0 ? `${q.done} / ${q.target}` : (q.done > 0 ? String(q.done) : '—');
+          const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
           return [
-            (t.title || '').slice(0, 50) + ((t.title || '').length > 50 ? '…' : ''),
+            String(idx + 1),
             clientName(t.clientId),
-            qStr,
+            (t.title || '').slice(0, 50) + ((t.title || '').length > 50 ? '…' : ''),
+            qtyDisplay(q),
+            q.target > 0 ? Math.round((q.done / q.target) * 100) + '%' : '—',
             statusLabel,
-            t.dueDate ? formatDate(t.dueDate) : '—',
           ];
         });
-        // #3: Add Subtotal row
-        const memberSubtotal = ['★ Subtotal', '', mQty.target > 0 ? `${mQty.done} / ${mQty.target}` : (mQty.done > 0 ? String(mQty.done) : '—'), `${mDone} of ${mTasks.length} done`, ''];
-        taskRows.push(memberSubtotal);
+        // Total row at bottom
+        const memberTotal = sumQty(mTasks);
+        bodyRows.push([
+          'Total', '', '',
+          memberTotal.target > 0 ? `${memberTotal.done} / ${memberTotal.target}` : (memberTotal.done > 0 ? String(memberTotal.done) : '—'),
+          memberTotal.target > 0 ? Math.round((memberTotal.done / memberTotal.target) * 100) + '%' : '—',
+          '',
+        ]);
 
+        // Member header bar: Month | Member Name (spans 5 cells)
+        // We use a 2-row head: row1 = month/name banner, row2 = column headers
         doc.autoTable({
-          startY: y + 2,
-          head: [['Task', 'Client', 'Done/Tgt', 'Status', 'Due']],
-          body: taskRows,
-          margin: { left: margin + 6, right: margin },
-          styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 },
-          headStyles: { fillColor: [253, 248, 241], textColor: [107, 88, 86], fontStyle: 'bold', lineWidth: 0.5, lineColor: [239, 226, 211] },
-          alternateRowStyles: { fillColor: [253, 248, 241] },
-          columnStyles: { 0: { cellWidth: 170 }, 2: { halign: 'center', cellWidth: 55 } },
+          startY: y,
+          head: [
+            [
+              { content: monthLabel, styles: { halign: 'center', fillColor: [250, 250, 250], textColor: [58, 45, 45], fontStyle: 'bold' } },
+              { content: member.name + (member.role ? '  ·  ' + member.role : ''), colSpan: 5, styles: { halign: 'center', fillColor: [250, 250, 250], textColor: [58, 45, 45], fontStyle: 'bold', fontSize: 11 } },
+            ],
+            ['Sr. No.', 'Client', 'Task', 'Quantity', 'Rate', 'Status'],
+          ],
+          body: bodyRows,
+          margin: { left: margin, right: margin },
+          styles: { font: 'helvetica', fontSize: 9, cellPadding: 5, lineColor: [196, 196, 196], lineWidth: 0.5, halign: 'center' },
+          headStyles: { fillColor: [250, 250, 250], textColor: [58, 45, 45], fontStyle: 'bold' },
+          columnStyles: {
+            0: { cellWidth: 50 },
+            1: { halign: 'center' },
+            2: { halign: 'left', cellWidth: 150 },
+            3: { halign: 'center', cellWidth: 60 },
+            4: { halign: 'center', cellWidth: 50 },
+            5: { halign: 'center', cellWidth: 65 },
+          },
           didParseCell: (data) => {
-            if (data.row.raw[0] === '★ Subtotal') {
+            // Bold "Total" row
+            if (data.section === 'body' && data.row.raw[0] === 'Total') {
               data.cell.styles.fontStyle = 'bold';
-              data.cell.styles.fillColor = [250, 236, 231];
-              data.cell.styles.textColor = [201, 112, 80];
+              data.cell.styles.fillColor = [250, 250, 250];
             }
           },
         });
@@ -1283,8 +1249,8 @@ function exportCustomBundleExcel(opts) {
   const teamMemberIdSet = teamFilter ? new Set(team.filter(m => m.teamId === teamFilter).map(m => m.id)) : null;
   const scopedTasks = teamMemberIdSet ? rangeTasks.filter(t => teamMemberIdSet.has(t.assigneeId)) : rangeTasks;
 
-  // ===== Team Summary sheet (top of workbook, only when teams + tasks exist) =====
-  if (includes.tasks && scopedTasks.length > 0 && teams.length > 0) {
+  // ===== Total Summary sheet =====
+  if (includes.tasks && scopedTasks.length > 0 && teams.length > 0 && !teamFilter) {
     const teamGroups = {};
     teams.forEach(tm => { teamGroups[tm.id] = { team: tm, members: [], tasks: [], qtyDone: 0, qtyTarget: 0 }; });
     teamGroups['__no_team__'] = { team: { id: null, name: 'No team' }, members: [], tasks: [], qtyDone: 0, qtyTarget: 0 };
@@ -1302,26 +1268,28 @@ function exportCustomBundleExcel(opts) {
       teamGroups[k].qtyDone += q.done;
       teamGroups[k].qtyTarget += q.target;
     });
-    const teamsWithData = Object.values(teamGroups).filter(g => g.tasks.length > 0 || g.members.length > 0).sort((a, b) => b.tasks.length - a.tasks.length);
-    const rows = [['Team', 'Members', 'Tasks', 'Done', 'Deliverables Done', 'Deliverables Target', 'Completion Rate']];
-    const totals = { members: 0, tasks: 0, done: 0, qtyDone: 0, qtyTarget: 0 };
+    const teamsWithData = Object.values(teamGroups).filter(g => g.tasks.length > 0).sort((a, b) => b.tasks.length - a.tasks.length);
+    const rows = [['Team', 'Members', 'Tasks', 'Quantity', 'Rate']];
+    const totals = { members: 0, tasks: 0, qtyDone: 0, qtyTarget: 0 };
     teamsWithData.forEach(g => {
-      const done = g.tasks.filter(t => t.status === 'done').length;
-      const rate = g.tasks.length > 0 ? Math.round((done / g.tasks.length) * 100) + '%' : '—';
-      rows.push([g.team.name, g.members.length, g.tasks.length, done, g.qtyDone, g.qtyTarget, rate]);
-      totals.members += g.members.length; totals.tasks += g.tasks.length; totals.done += done; totals.qtyDone += g.qtyDone; totals.qtyTarget += g.qtyTarget;
+      const qStr = g.qtyTarget > 0 ? `${g.qtyDone} / ${g.qtyTarget}` : (g.qtyDone > 0 ? String(g.qtyDone) : '—');
+      const rate = g.qtyTarget > 0 ? Math.round((g.qtyDone / g.qtyTarget) * 100) + '%' : '—';
+      rows.push([g.team.name, g.members.length, g.tasks.length, qStr, rate]);
+      totals.members += g.members.length; totals.tasks += g.tasks.length;
+      totals.qtyDone += g.qtyDone; totals.qtyTarget += g.qtyTarget;
     });
-    const grandRate = totals.tasks > 0 ? Math.round((totals.done / totals.tasks) * 100) + '%' : '—';
-    rows.push(['TOTAL', totals.members, totals.tasks, totals.done, totals.qtyDone, totals.qtyTarget, grandRate]);
+    const grandQty = totals.qtyTarget > 0 ? `${totals.qtyDone} / ${totals.qtyTarget}` : (totals.qtyDone > 0 ? String(totals.qtyDone) : '—');
+    const grandRate = totals.qtyTarget > 0 ? Math.round((totals.qtyDone / totals.qtyTarget) * 100) + '%' : '—';
+    rows.push(['Total', totals.members, totals.tasks, grandQty, grandRate]);
     const wsTeamSum = XLSX.utils.aoa_to_sheet(rows);
-    wsTeamSum['!cols'] = [{ wch: 22 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 20 }, { wch: 16 }];
-    XLSX.utils.book_append_sheet(wb, wsTeamSum, 'Team Summary');
+    wsTeamSum['!cols'] = [{ wch: 22 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, wsTeamSum, 'Total Summary');
   }
 
   if (includes.tasks) {
-    // Replace single Tasks sheet with team-grouped structure
-    const rows = [['Team', 'Member', 'Role', 'Task', 'Client', 'Done', 'Target', 'Status', 'Priority', 'Due Date', 'Created']];
-    // Group by team → member
+    // One sheet per team. Within a sheet, member blocks separated by blank rows.
+    const monthLabel = (() => { try { const d = new Date(from + 'T00:00:00'); return d.toLocaleString('en-US', { month: 'long' }); } catch { return ''; } })();
+
     const teamGroups2 = {};
     teams.forEach(tm => { teamGroups2[tm.id] = { team: tm, members: {} }; });
     teamGroups2['__no_team__'] = { team: { id: null, name: 'No team' }, members: {} };
@@ -1333,57 +1301,48 @@ function exportCustomBundleExcel(opts) {
       if (!teamGroups2[tKey].members[mKey]) teamGroups2[tKey].members[mKey] = { member: m, tasks: [] };
       teamGroups2[tKey].members[mKey].tasks.push(t);
     });
-    Object.values(teamGroups2)
-      .filter(g => Object.values(g.members).some(mg => mg.tasks.length > 0))
-      .sort((a, b) => {
-        const ac = Object.values(a.members).reduce((s, mg) => s + mg.tasks.length, 0);
-        const bc = Object.values(b.members).reduce((s, mg) => s + mg.tasks.length, 0);
-        return bc - ac;
-      })
-      .forEach(g => {
-        Object.values(g.members)
-          .filter(mg => mg.tasks.length > 0)
-          .sort((a, b) => b.tasks.length - a.tasks.length)
-          .forEach(mg => {
-            mg.tasks.forEach(t => {
-              const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
-              const q = taskQty(t);
-              rows.push([
-                g.team.name,
-                mg.member?.name || 'Unassigned',
-                mg.member?.role || '',
-                t.title || '',
-                clientName(t.clientId),
-                q.done > 0 ? q.done : '',
-                q.target > 0 ? q.target : '',
-                statusLabel,
-                t.priority || '',
-                t.dueDate ? formatDate(t.dueDate) : '',
-                t.createdAt ? formatDate(t.createdAt) : '',
-              ]);
-            });
-            // Subtotal row per member
-            const memberDone = mg.tasks.filter(t => t.status === 'done').length;
-            const memberQ = mg.tasks.reduce((s, t) => { const q = taskQty(t); s.done += q.done; s.target += q.target; return s; }, { done: 0, target: 0 });
-            rows.push([
-              g.team.name,
-              `★ ${mg.member?.name || 'Unassigned'} subtotal`,
-              '',
-              `${mg.tasks.length} tasks · ${memberDone} done`,
-              '',
-              memberQ.done || '',
-              memberQ.target || '',
-              '',
-              '',
-              '',
-              '',
-            ]);
-            rows.push([]); // blank separator
-          });
+
+    const teamsWithData = Object.values(teamGroups2).filter(g => Object.values(g.members).some(mg => mg.tasks.length > 0));
+
+    teamsWithData.forEach(g => {
+      const sheetRows = [];
+      const membersWithTasks = Object.values(g.members)
+        .filter(mg => mg.tasks.length > 0)
+        .sort((a, b) => b.tasks.length - a.tasks.length);
+
+      membersWithTasks.forEach((mg, blockIdx) => {
+        // Block header row: [Month, Member Name, '', '', '', '']
+        sheetRows.push([monthLabel, mg.member?.name || 'Unassigned' + (mg.member?.role ? '  ·  ' + mg.member.role : ''), '', '', '', '']);
+        // Column headers
+        sheetRows.push(['Sr. No.', 'Client', 'Task', 'Quantity', 'Rate', 'Status']);
+        // Sort tasks: done first
+        const statusOrder = { done: 0, progress: 1, review: 2, todo: 3, blocked: 4 };
+        const sortedTasks = [...mg.tasks].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
+        sortedTasks.forEach((t, idx) => {
+          const q = taskQty(t);
+          const qStr = q.target > 0 ? `${q.done} / ${q.target}` : (q.done > 0 ? String(q.done) : '');
+          const rate = q.target > 0 ? Math.round((q.done / q.target) * 100) + '%' : '';
+          const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
+          sheetRows.push([idx + 1, clientName(t.clientId), t.title || '', qStr, rate, statusLabel]);
+        });
+        // Total row
+        const memberQ = mg.tasks.reduce((s, t) => { const q = taskQty(t); s.done += q.done; s.target += q.target; return s; }, { done: 0, target: 0 });
+        const totalQ = memberQ.target > 0 ? `${memberQ.done} / ${memberQ.target}` : (memberQ.done > 0 ? String(memberQ.done) : '');
+        const totalRate = memberQ.target > 0 ? Math.round((memberQ.done / memberQ.target) * 100) + '%' : '';
+        sheetRows.push(['Total', '', '', totalQ, totalRate, '']);
+        // Blank separator (except after last member)
+        if (blockIdx < membersWithTasks.length - 1) {
+          sheetRows.push([]);
+          sheetRows.push([]);
+        }
       });
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 40 }, { wch: 22 }, { wch: 8 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Tasks by Team');
+
+      const ws = XLSX.utils.aoa_to_sheet(sheetRows);
+      ws['!cols'] = [{ wch: 12 }, { wch: 22 }, { wch: 40 }, { wch: 14 }, { wch: 10 }, { wch: 14 }];
+      // Sheet name: cap at 31 chars (Excel limit), no invalid chars
+      const safeName = (g.team.name || 'Team').replace(/[\\/?*[\]:]/g, '').slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, safeName);
+    });
   }
 
   if (includes.posts) {
