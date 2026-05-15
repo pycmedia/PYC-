@@ -930,13 +930,15 @@ function generateCustomBundlePDF(opts) {
   const memberName = (id) => team.find(m => m.id === id)?.name || 'Unassigned';
   const teamName = (id) => teams.find(t => t.id === id)?.name || 'No team';
   const clientName = (id) => clients.find(c => c.id === id)?.name || 'No client';
+  const hexToRgb = (h) => { const x = (h || '#c97050').replace('#', ''); const v = parseInt(x.length === 3 ? x.split('').map(c => c + c).join('') : x, 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; };
 
   // Cover page
+  const coverTitle = opts.teamFilter ? `${teams.find(t => t.id === opts.teamFilter)?.name || 'Team'} Report` : 'Studio Bundle Report';
   doc.setFillColor(58, 45, 45); doc.rect(0, 0, pageW, 100, 'F');
   doc.setFillColor(232, 145, 119); doc.rect(0, 96, pageW, 4, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold').setFontSize(24);
-  doc.text('Studio Bundle Report', margin, 44);
+  doc.text(coverTitle, margin, 44);
   doc.setFont('helvetica', 'normal').setFontSize(11);
   doc.text(formatDate(from) + ' — ' + formatDate(to), margin, 70);
 
@@ -967,37 +969,234 @@ function generateCustomBundlePDF(opts) {
   const ensureSpace = (h) => { if (y + h > pageH - 60) { doc.addPage(); y = margin; } };
   const sectionHeader = (title, subtitle) => { ensureSpace(40); doc.setTextColor(58, 45, 45); doc.setFont('helvetica', 'bold').setFontSize(14); doc.text(title, margin, y); if (subtitle) { y += 14; doc.setFont('helvetica', 'normal').setFontSize(9); doc.setTextColor(168, 155, 151); doc.text(subtitle, margin, y); } y += 12; };
 
-  // Tasks section
-  if (includes.tasks && rangeTasks.length > 0) {
-    sectionHeader('Tasks', rangeTasks.length + ' tasks');
-    const rows = rangeTasks.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(t => {
-      const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
-      return [(t.title || '').slice(0, 45) + ((t.title || '').length > 45 ? '…' : ''), memberName(t.assigneeId), clientName(t.clientId), statusLabel, t.priority || '—', t.dueDate ? formatDate(t.dueDate) : '—'];
-    });
-    doc.autoTable({ startY: y, head: [['Task', 'Assignee', 'Client', 'Status', 'Priority', 'Due']], body: rows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: [232, 145, 119], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] }, columnStyles: { 0: { cellWidth: 160 } } });
-    y = doc.lastAutoTable.finalY + 18;
+  // Helpers for quantity totals
+  const taskQty = (t) => ({ target: t.quantityTarget || 0, done: t.quantityDone || 0 });
+  const sumQty = (taskList) => taskList.reduce((s, t) => { const q = taskQty(t); s.target += q.target; s.done += q.done; return s; }, { target: 0, done: 0 });
+  const qtyDisplay = (q) => q.target > 0 ? `${q.done} / ${q.target}` : (q.done > 0 ? `${q.done}` : '—');
+
+  // Filter by team if specified
+  const teamFilter = opts.teamFilter;  // optional team_id to restrict scope
+  if (teamFilter) {
+    const teamMemberIds = team.filter(m => m.teamId === teamFilter).map(m => m.id);
+    // rangeTasks is computed above this point; re-filter
   }
+
+  // Tasks section — GROUPED BY TEAM
+  if (includes.tasks && rangeTasks.length > 0) {
+    // Tasks filtered to scope (team filter if set)
+    let scopedTasks = rangeTasks;
+    if (teamFilter) {
+      const teamMemberIds = team.filter(m => m.teamId === teamFilter).map(m => m.id);
+      scopedTasks = rangeTasks.filter(t => teamMemberIds.includes(t.assigneeId));
+    }
+
+    sectionHeader('Tasks', scopedTasks.length + ' tasks · grouped by team');
+
+    // ===== #1: Top "By team" summary table =====
+    // Build per-team aggregates
+    const teamGroups = {};
+    teams.forEach(tm => { teamGroups[tm.id] = { team: tm, members: [], tasks: [], qty: { target: 0, done: 0 } }; });
+    teamGroups['__no_team__'] = { team: { id: null, name: 'No team', color: '#a89b97' }, members: [], tasks: [], qty: { target: 0, done: 0 } };
+
+    team.forEach(m => {
+      const key = m.teamId || '__no_team__';
+      if (!teamGroups[key]) teamGroups[key] = { team: { id: m.teamId, name: 'No team', color: '#a89b97' }, members: [], tasks: [], qty: { target: 0, done: 0 } };
+      teamGroups[key].members.push(m);
+    });
+
+    scopedTasks.forEach(t => {
+      const member = team.find(m => m.id === t.assigneeId);
+      const key = member?.teamId || '__no_team__';
+      if (!teamGroups[key]) teamGroups[key] = { team: { id: member?.teamId, name: 'No team', color: '#a89b97' }, members: [], tasks: [], qty: { target: 0, done: 0 } };
+      teamGroups[key].tasks.push(t);
+      const q = taskQty(t);
+      teamGroups[key].qty.target += q.target;
+      teamGroups[key].qty.done += q.done;
+    });
+
+    // Filter to only teams with members AND tasks for the summary table
+    const teamsWithData = Object.values(teamGroups).filter(g => g.tasks.length > 0 || g.members.length > 0);
+    teamsWithData.sort((a, b) => b.tasks.length - a.tasks.length);
+
+    // Summary table
+    ensureSpace(80);
+    doc.setTextColor(58, 45, 45);
+    doc.setFont('helvetica', 'bold').setFontSize(11);
+    doc.text('By team — overview', margin, y); y += 4;
+    const summaryRows = teamsWithData.map(g => {
+      const done = g.tasks.filter(t => t.status === 'done').length;
+      const rate = g.tasks.length > 0 ? Math.round((done / g.tasks.length) * 100) + '%' : '—';
+      return [g.team.name, String(g.members.length), String(g.tasks.length), String(done), qtyDisplay(g.qty), rate];
+    });
+    // Add TOTAL row
+    const grandTotal = teamsWithData.reduce((acc, g) => {
+      acc.members += g.members.length;
+      acc.tasks += g.tasks.length;
+      acc.done += g.tasks.filter(t => t.status === 'done').length;
+      acc.qtyDone += g.qty.done;
+      acc.qtyTarget += g.qty.target;
+      return acc;
+    }, { members: 0, tasks: 0, done: 0, qtyDone: 0, qtyTarget: 0 });
+    const grandRate = grandTotal.tasks > 0 ? Math.round((grandTotal.done / grandTotal.tasks) * 100) + '%' : '—';
+    summaryRows.push(['TOTAL', String(grandTotal.members), String(grandTotal.tasks), String(grandTotal.done), grandTotal.qtyTarget > 0 ? `${grandTotal.qtyDone} / ${grandTotal.qtyTarget}` : (grandTotal.qtyDone > 0 ? String(grandTotal.qtyDone) : '—'), grandRate]);
+
+    doc.autoTable({
+      startY: y + 4,
+      head: [['Team', 'Members', 'Tasks', 'Done', 'Deliverables', 'Rate']],
+      body: summaryRows,
+      margin: { left: margin, right: margin },
+      styles: { font: 'helvetica', fontSize: 9, cellPadding: 6 },
+      headStyles: { fillColor: [58, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [253, 248, 241] },
+      didParseCell: (data) => {
+        // Bold + tinted background for TOTAL row
+        if (data.row.raw[0] === 'TOTAL') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [250, 236, 231];
+          data.cell.styles.textColor = [58, 45, 45];
+        }
+      },
+    });
+    y = doc.lastAutoTable.finalY + 20;
+
+    // ===== Per-team sections =====
+    teamsWithData.forEach(group => {
+      if (group.tasks.length === 0) return; // skip empty teams
+      ensureSpace(80);
+
+      // Convert team color hex to RGB
+      const teamHex = group.team.color || '#c97050';
+      const teamRgb = hexToRgb(teamHex);
+
+      // Team band
+      doc.setFillColor(teamRgb[0], teamRgb[1], teamRgb[2]);
+      doc.setDrawColor(teamRgb[0], teamRgb[1], teamRgb[2]);
+      doc.rect(margin, y, 3, 24, 'F');
+      doc.setTextColor(teamRgb[0], teamRgb[1], teamRgb[2]);
+      doc.setFont('helvetica', 'bold').setFontSize(13);
+      doc.text(group.team.name.toUpperCase(), margin + 10, y + 12);
+      doc.setFont('helvetica', 'normal').setFontSize(9);
+      doc.setTextColor(107, 88, 86);
+      const teamDone = group.tasks.filter(t => t.status === 'done').length;
+      const subline = `${group.members.length} members · ${group.tasks.length} tasks · ${teamDone} done` +
+        (group.qty.target > 0 || group.qty.done > 0 ? ` · ${qtyDisplay(group.qty)} deliverables` : '');
+      doc.text(subline, margin + 10, y + 22);
+      y += 32;
+
+      // ===== #2: Per-team member breakdown table =====
+      const membersWithTasks = group.members.map(m => {
+        const mt = group.tasks.filter(t => t.assigneeId === m.id);
+        const mDone = mt.filter(t => t.status === 'done').length;
+        const mq = sumQty(mt);
+        return { member: m, tasks: mt, done: mDone, qty: mq };
+      }).filter(x => x.tasks.length > 0).sort((a, b) => b.tasks.length - a.tasks.length);
+
+      if (membersWithTasks.length > 1) {
+        ensureSpace(40);
+        doc.setFont('helvetica', 'bold').setFontSize(10);
+        doc.setTextColor(58, 45, 45);
+        doc.text('Members at a glance', margin + 6, y); y += 4;
+        const breakdownRows = membersWithTasks.map(x => {
+          const rate = x.tasks.length > 0 ? Math.round((x.done / x.tasks.length) * 100) + '%' : '—';
+          return [x.member.name, String(x.tasks.length), String(x.done), qtyDisplay(x.qty), rate];
+        });
+        doc.autoTable({
+          startY: y + 4,
+          head: [['Member', 'Tasks', 'Done', 'Deliverables', 'Rate']],
+          body: breakdownRows,
+          margin: { left: margin + 6, right: margin },
+          styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 },
+          headStyles: { fillColor: [teamRgb[0], teamRgb[1], teamRgb[2]], textColor: [255, 255, 255], fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [253, 248, 241] },
+        });
+        y = doc.lastAutoTable.finalY + 14;
+      }
+
+      // ===== Per-member task tables =====
+      membersWithTasks.forEach(({ member, tasks: mTasks, qty: mQty }) => {
+        ensureSpace(80);
+        doc.setFont('helvetica', 'bold').setFontSize(10);
+        doc.setTextColor(58, 45, 45);
+        const memberLabel = `${member.name}${member.role ? ' · ' + member.role : ''}`;
+        doc.text(memberLabel, margin + 6, y);
+        doc.setFont('helvetica', 'normal').setFontSize(9);
+        doc.setTextColor(107, 88, 86);
+        const mDone = mTasks.filter(t => t.status === 'done').length;
+        const memberMeta = `${mTasks.length} tasks · ${mDone} done` + (mQty.target > 0 ? ` · ${qtyDisplay(mQty)} deliverables` : '');
+        // Right-aligned meta
+        const metaWidth = doc.getTextWidth(memberMeta);
+        doc.text(memberMeta, pageW - margin - metaWidth, y);
+        y += 8;
+
+        const taskRows = mTasks.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(t => {
+          const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
+          const q = taskQty(t);
+          const qStr = q.target > 0 ? `${q.done} / ${q.target}` : (q.done > 0 ? String(q.done) : '—');
+          return [
+            (t.title || '').slice(0, 50) + ((t.title || '').length > 50 ? '…' : ''),
+            clientName(t.clientId),
+            qStr,
+            statusLabel,
+            t.dueDate ? formatDate(t.dueDate) : '—',
+          ];
+        });
+        // #3: Add Subtotal row
+        const memberSubtotal = ['★ Subtotal', '', mQty.target > 0 ? `${mQty.done} / ${mQty.target}` : (mQty.done > 0 ? String(mQty.done) : '—'), `${mDone} of ${mTasks.length} done`, ''];
+        taskRows.push(memberSubtotal);
+
+        doc.autoTable({
+          startY: y + 2,
+          head: [['Task', 'Client', 'Done/Tgt', 'Status', 'Due']],
+          body: taskRows,
+          margin: { left: margin + 6, right: margin },
+          styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 },
+          headStyles: { fillColor: [253, 248, 241], textColor: [107, 88, 86], fontStyle: 'bold', lineWidth: 0.5, lineColor: [239, 226, 211] },
+          alternateRowStyles: { fillColor: [253, 248, 241] },
+          columnStyles: { 0: { cellWidth: 170 }, 2: { halign: 'center', cellWidth: 55 } },
+          didParseCell: (data) => {
+            if (data.row.raw[0] === '★ Subtotal') {
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.fillColor = [250, 236, 231];
+              data.cell.styles.textColor = [201, 112, 80];
+            }
+          },
+        });
+        y = doc.lastAutoTable.finalY + 14;
+      });
+
+      y += 6;
+    });
+  }
+
+  // For sections downstream, scope by teamFilter if set
+  const teamMemberIdSet = teamFilter ? new Set(team.filter(m => m.teamId === teamFilter).map(m => m.id)) : null;
+  const inScope = (assigneeId) => !teamMemberIdSet || teamMemberIdSet.has(assigneeId);
 
   // Posts section
   if (includes.posts && rangePosts.length > 0) {
-    sectionHeader('Posts', rangePosts.length + ' posts (' + rangePosts.filter(p => p.status === 'published').length + ' published)');
-    const rows = rangePosts.sort((a, b) => (b.scheduledDate || '').localeCompare(a.scheduledDate || '')).map(p => [
-      formatDate(p.scheduledDate),
-      clientName(p.clientId),
-      (p.platform || '—'),
-      p.status || 'draft',
-      (p.likes || 0).toLocaleString(),
-      (p.reach || 0).toLocaleString(),
-      (p.caption || '').slice(0, 40) + ((p.caption || '').length > 40 ? '…' : ''),
-    ]);
-    doc.autoTable({ startY: y, head: [['Date', 'Client', 'Platform', 'Status', 'Likes', 'Reach', 'Caption']], body: rows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: [125, 99, 163], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] }, columnStyles: { 6: { cellWidth: 120 } } });
-    y = doc.lastAutoTable.finalY + 18;
+    // Posts don't have assignees in most cases; skip filtering by team for posts unless they have assigneeId
+    const scopedPosts = teamMemberIdSet ? rangePosts.filter(p => !p.assigneeId || teamMemberIdSet.has(p.assigneeId)) : rangePosts;
+    if (scopedPosts.length > 0) {
+      sectionHeader('Posts', scopedPosts.length + ' posts (' + scopedPosts.filter(p => p.status === 'published').length + ' published)');
+      const rows = scopedPosts.sort((a, b) => (b.scheduledDate || '').localeCompare(a.scheduledDate || '')).map(p => [
+        formatDate(p.scheduledDate),
+        clientName(p.clientId),
+        (p.platform || '—'),
+        p.status || 'draft',
+        (p.likes || 0).toLocaleString(),
+        (p.reach || 0).toLocaleString(),
+        (p.caption || '').slice(0, 40) + ((p.caption || '').length > 40 ? '…' : ''),
+      ]);
+      doc.autoTable({ startY: y, head: [['Date', 'Client', 'Platform', 'Status', 'Likes', 'Reach', 'Caption']], body: rows, margin: { left: margin, right: margin }, styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: [125, 99, 163], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [253, 248, 241] }, columnStyles: { 6: { cellWidth: 120 } } });
+      y = doc.lastAutoTable.finalY + 18;
+    }
   }
 
-  // Team section
+  // Team section (per-member performance table)
   if (includes.team && team.length > 0) {
+    const scopedTeam = teamMemberIdSet ? team.filter(m => teamMemberIdSet.has(m.id)) : team;
     sectionHeader('Team performance', 'tasks per member in range');
-    const rows = team.map(m => {
+    const rows = scopedTeam.map(m => {
       const mt = rangeTasks.filter(t => t.assigneeId === m.id);
       const done = mt.filter(t => t.status === 'done').length;
       const rate = mt.length > 0 ? Math.round((done / mt.length) * 100) + '%' : '—';
@@ -1045,7 +1244,8 @@ function generateCustomBundlePDF(opts) {
   const pages = doc.internal.pages.length - 1;
   for (let i = 1; i <= pages; i++) { doc.setPage(i); doc.setFont('helvetica', 'normal').setFontSize(8); doc.setTextColor(168, 155, 151); doc.text('Generated ' + new Date().toLocaleDateString() + ' · Studio with Sunny', margin, pageH - 20); doc.text('Page ' + i + ' of ' + pages, pageW - margin - 50, pageH - 20); }
 
-  doc.save('studio_bundle_' + from + '_to_' + to + '.pdf');
+  const fileBase = opts.teamFilter ? `${(teams.find(t => t.id === opts.teamFilter)?.name || 'team').replace(/[^a-z0-9]/gi, '_').toLowerCase()}_report` : 'studio_bundle';
+  doc.save(fileBase + '_' + from + '_to_' + to + '.pdf');
 }
 
 function exportCustomBundleExcel(opts) {
@@ -1077,15 +1277,113 @@ function exportCustomBundleExcel(opts) {
   ws1['!cols'] = [{ wch: 24 }, { wch: 22 }];
   XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
 
-  if (includes.tasks) {
-    const rows = [['Title', 'Assignee', 'Client', 'Status', 'Priority', 'Due Date', 'Created']];
-    rangeTasks.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).forEach(t => {
-      const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
-      rows.push([t.title || '', memberName(t.assigneeId), clientName(t.clientId), statusLabel, t.priority || '', t.dueDate ? formatDate(t.dueDate) : '', t.createdAt ? formatDate(t.createdAt) : '']);
+  // Helpers for quantity
+  const taskQty = (t) => ({ target: t.quantityTarget || 0, done: t.quantityDone || 0 });
+  const teamFilter = opts.teamFilter;
+  const teamMemberIdSet = teamFilter ? new Set(team.filter(m => m.teamId === teamFilter).map(m => m.id)) : null;
+  const scopedTasks = teamMemberIdSet ? rangeTasks.filter(t => teamMemberIdSet.has(t.assigneeId)) : rangeTasks;
+
+  // ===== Team Summary sheet (top of workbook, only when teams + tasks exist) =====
+  if (includes.tasks && scopedTasks.length > 0 && teams.length > 0) {
+    const teamGroups = {};
+    teams.forEach(tm => { teamGroups[tm.id] = { team: tm, members: [], tasks: [], qtyDone: 0, qtyTarget: 0 }; });
+    teamGroups['__no_team__'] = { team: { id: null, name: 'No team' }, members: [], tasks: [], qtyDone: 0, qtyTarget: 0 };
+    team.forEach(m => {
+      const k = m.teamId || '__no_team__';
+      if (!teamGroups[k]) teamGroups[k] = { team: { id: m.teamId, name: 'No team' }, members: [], tasks: [], qtyDone: 0, qtyTarget: 0 };
+      teamGroups[k].members.push(m);
     });
+    scopedTasks.forEach(t => {
+      const m = team.find(x => x.id === t.assigneeId);
+      const k = m?.teamId || '__no_team__';
+      if (!teamGroups[k]) teamGroups[k] = { team: { id: m?.teamId, name: 'No team' }, members: [], tasks: [], qtyDone: 0, qtyTarget: 0 };
+      teamGroups[k].tasks.push(t);
+      const q = taskQty(t);
+      teamGroups[k].qtyDone += q.done;
+      teamGroups[k].qtyTarget += q.target;
+    });
+    const teamsWithData = Object.values(teamGroups).filter(g => g.tasks.length > 0 || g.members.length > 0).sort((a, b) => b.tasks.length - a.tasks.length);
+    const rows = [['Team', 'Members', 'Tasks', 'Done', 'Deliverables Done', 'Deliverables Target', 'Completion Rate']];
+    const totals = { members: 0, tasks: 0, done: 0, qtyDone: 0, qtyTarget: 0 };
+    teamsWithData.forEach(g => {
+      const done = g.tasks.filter(t => t.status === 'done').length;
+      const rate = g.tasks.length > 0 ? Math.round((done / g.tasks.length) * 100) + '%' : '—';
+      rows.push([g.team.name, g.members.length, g.tasks.length, done, g.qtyDone, g.qtyTarget, rate]);
+      totals.members += g.members.length; totals.tasks += g.tasks.length; totals.done += done; totals.qtyDone += g.qtyDone; totals.qtyTarget += g.qtyTarget;
+    });
+    const grandRate = totals.tasks > 0 ? Math.round((totals.done / totals.tasks) * 100) + '%' : '—';
+    rows.push(['TOTAL', totals.members, totals.tasks, totals.done, totals.qtyDone, totals.qtyTarget, grandRate]);
+    const wsTeamSum = XLSX.utils.aoa_to_sheet(rows);
+    wsTeamSum['!cols'] = [{ wch: 22 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 20 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsTeamSum, 'Team Summary');
+  }
+
+  if (includes.tasks) {
+    // Replace single Tasks sheet with team-grouped structure
+    const rows = [['Team', 'Member', 'Role', 'Task', 'Client', 'Done', 'Target', 'Status', 'Priority', 'Due Date', 'Created']];
+    // Group by team → member
+    const teamGroups2 = {};
+    teams.forEach(tm => { teamGroups2[tm.id] = { team: tm, members: {} }; });
+    teamGroups2['__no_team__'] = { team: { id: null, name: 'No team' }, members: {} };
+    scopedTasks.forEach(t => {
+      const m = team.find(x => x.id === t.assigneeId);
+      const tKey = m?.teamId || '__no_team__';
+      if (!teamGroups2[tKey]) teamGroups2[tKey] = { team: { name: 'No team' }, members: {} };
+      const mKey = m?.id || '__unassigned__';
+      if (!teamGroups2[tKey].members[mKey]) teamGroups2[tKey].members[mKey] = { member: m, tasks: [] };
+      teamGroups2[tKey].members[mKey].tasks.push(t);
+    });
+    Object.values(teamGroups2)
+      .filter(g => Object.values(g.members).some(mg => mg.tasks.length > 0))
+      .sort((a, b) => {
+        const ac = Object.values(a.members).reduce((s, mg) => s + mg.tasks.length, 0);
+        const bc = Object.values(b.members).reduce((s, mg) => s + mg.tasks.length, 0);
+        return bc - ac;
+      })
+      .forEach(g => {
+        Object.values(g.members)
+          .filter(mg => mg.tasks.length > 0)
+          .sort((a, b) => b.tasks.length - a.tasks.length)
+          .forEach(mg => {
+            mg.tasks.forEach(t => {
+              const statusLabel = ({ todo: 'To do', progress: 'In progress', review: 'Review', done: 'Done', blocked: 'Blocked' })[t.status] || t.status;
+              const q = taskQty(t);
+              rows.push([
+                g.team.name,
+                mg.member?.name || 'Unassigned',
+                mg.member?.role || '',
+                t.title || '',
+                clientName(t.clientId),
+                q.done > 0 ? q.done : '',
+                q.target > 0 ? q.target : '',
+                statusLabel,
+                t.priority || '',
+                t.dueDate ? formatDate(t.dueDate) : '',
+                t.createdAt ? formatDate(t.createdAt) : '',
+              ]);
+            });
+            // Subtotal row per member
+            const memberDone = mg.tasks.filter(t => t.status === 'done').length;
+            const memberQ = mg.tasks.reduce((s, t) => { const q = taskQty(t); s.done += q.done; s.target += q.target; return s; }, { done: 0, target: 0 });
+            rows.push([
+              g.team.name,
+              `★ ${mg.member?.name || 'Unassigned'} subtotal`,
+              '',
+              `${mg.tasks.length} tasks · ${memberDone} done`,
+              '',
+              memberQ.done || '',
+              memberQ.target || '',
+              '',
+              '',
+              '',
+              '',
+            ]);
+            rows.push([]); // blank separator
+          });
+      });
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 50 }, { wch: 22 }, { wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
+    ws['!cols'] = [{ wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 40 }, { wch: 22 }, { wch: 8 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Tasks by Team');
   }
 
   if (includes.posts) {
@@ -1097,8 +1395,9 @@ function exportCustomBundleExcel(opts) {
   }
 
   if (includes.team) {
+    const scopedTeam = teamMemberIdSet ? team.filter(m => teamMemberIdSet.has(m.id)) : team;
     const rows = [['Name', 'Role', 'Team', 'Email', 'Total Tasks', 'Completed', 'Completion Rate']];
-    team.forEach(m => {
+    scopedTeam.forEach(m => {
       const mt = rangeTasks.filter(t => t.assigneeId === m.id);
       const done = mt.filter(t => t.status === 'done').length;
       const rate = mt.length > 0 ? Math.round((done / mt.length) * 100) + '%' : '—';
@@ -1106,7 +1405,7 @@ function exportCustomBundleExcel(opts) {
     });
     const ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!cols'] = [{ wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 16 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Team');
+    XLSX.utils.book_append_sheet(wb, ws, 'Team Performance');
   }
 
   if (includes.comms) {
@@ -1133,7 +1432,8 @@ function exportCustomBundleExcel(opts) {
     XLSX.utils.book_append_sheet(wb, ws, 'Strategy');
   }
 
-  XLSX.writeFile(wb, 'studio_bundle_' + from + '_to_' + to + '.xlsx');
+  const fileBaseXlsx = opts.teamFilter ? `${(teams.find(t => t.id === opts.teamFilter)?.name || 'team').replace(/[^a-z0-9]/gi, '_').toLowerCase()}_report` : 'studio_bundle';
+  XLSX.writeFile(wb, fileBaseXlsx + '_' + from + '_to_' + to + '.xlsx');
 }
 
 const fetchTable = async (table) => { const { data, error } = await sb.from(table).select('*'); if (error) { console.error(`fetch ${table}:`, error); return []; } return data.map(toCamel); };
@@ -2185,7 +2485,7 @@ function Dashboard({ user, membership }) {
         <main className="flex-1 min-h-screen" style={{ padding: '32px 40px', maxWidth: 1380 }}>
           {view === 'dashboard' && <DashboardView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} strategies={strategies} notes={notes} teamMessages={teamMessages} leaveRequests={leaveRequests} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} onSaveNote={async (n) => { await saveItem('notes', n); }} onDeleteNote={async (id) => { await removeItem('notes', id); }} userEmail={user.email} userId={user.id} onRefreshMessages={() => refetch('team_messages')} />}
           {view === 'tasks' && <TasksView tasks={tasks} team={team} teams={teams} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
-          {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} clients={clients} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} onAddTask={(memberId) => setModal({ type: 'task', data: { assigneeId: memberId } })} onEditTask={(t) => setModal({ type: 'task', data: t })} onQuickStatus={(taskId, status) => upsertItem('tasks', { id: taskId, status, completedAt: status === 'done' ? new Date().toISOString() : null }, user.id, workspaceId)} onDeleteTask={async (taskId) => { if (!confirm('Delete this task?')) return; await supabase.from('tasks').delete().eq('id', taskId); refetch('tasks'); }} />}
+          {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} clients={clients} posts={posts} comms={comms} igReports={igReports} strategies={strategies} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} onAddTask={(memberId) => setModal({ type: 'task', data: { assigneeId: memberId } })} onEditTask={(t) => setModal({ type: 'task', data: t })} onQuickStatus={(taskId, status) => upsertItem('tasks', { id: taskId, status, completedAt: status === 'done' ? new Date().toISOString() : null }, user.id, workspaceId)} onDeleteTask={async (taskId) => { if (!confirm('Delete this task?')) return; await supabase.from('tasks').delete().eq('id', taskId); refetch('tasks'); }} />}
           {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} posts={posts} briefs={briefs} attachments={clientAttachments} workspaceId={workspaceId} userId={user.id} onRefreshAttachments={() => refetch('client_attachments')} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} onEditBrief={(c) => setModal({ type: 'brief', data: { client: c, brief: briefs.find(b => b.clientId === c.id) } })} onAddPost={(date, clientId) => setModal({ type: 'post', data: { scheduledDate: date || '', clientId: clientId || '' } })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'calendar' && <CalendarView posts={posts} clients={clients} updateStatus={updatePostStatus} onAdd={(date) => setModal({ type: 'post', data: date ? { scheduledDate: date } : undefined })} onEdit={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'reports' && <ReportsView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} igReports={igReports} strategies={strategies} onAddIgReport={() => setModal({ type: 'igReport' })} onImportIg={() => setModal({ type: 'igImport' })} onEditIgReport={(r) => setModal({ type: 'igReport', data: r })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
@@ -2900,10 +3200,11 @@ function TaskRow({ task, team, teams, clients, compact, onClick, onStatusChange 
   );
 }
 
-function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAddTeam, onEditTeam, onAddTask, onEditTask, onQuickStatus, onDeleteTask }) {
+function TeamView({ team, teams, tasks, clients, posts, comms, igReports, strategies, onAddMember, onEditMember, onAddTeam, onEditTeam, onAddTask, onEditTask, onQuickStatus, onDeleteTask }) {
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [selectedMemberId, setSelectedMemberId] = useState(null);
   const [reportMember, setReportMember] = useState(null);
+  const [reportTeam, setReportTeam] = useState(null);
   const sortedTeams = [...teams].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
   // If a member is selected, show their profile (regardless of team filter)
@@ -2937,9 +3238,9 @@ function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAd
       <div className="fade-in">
         <PageHeader title="Team" subtitle="your dream team ✨" action={<div className="flex gap-2"><button className="btn-ghost" onClick={onAddTeam}><Folder size={13} /> New team</button><button className="btn-primary" onClick={onAddMember}><Plus size={14} /> Add member</button></div>} />
         <div className="grid grid-cols-3 gap-3">
-          {sortedTeams.map(t => { const members = team.filter(m => m.teamId === t.id); const memberTasks = tasks.filter(task => members.some(m => m.id === task.assigneeId)); const active = memberTasks.filter(task => task.status !== 'done').length; return (
-            <button key={t.id} onClick={() => setSelectedTeamId(t.id)} className="card card-hover" style={{ textAlign: 'left' }}>
-              <div className="flex items-start justify-between mb-4"><div style={{ width: 38, height: 38, borderRadius: 12, background: (t.color || 'var(--coral)') + '22', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Folder size={16} color={t.color || 'var(--coral)'} /></div><ChevronRight size={14} color="var(--muted)" /></div>
+          {sortedTeams.map(t => { const members = team.filter(m => m.teamId === t.id); const memberTasks = tasks.filter(task => members.some(m => m.id === task.assigneeId)); const active = memberTasks.filter(task => task.status !== 'done').length; const openTeamReport = (e) => { e.stopPropagation(); setReportTeam(t); }; return (
+            <button key={t.id} onClick={() => setSelectedTeamId(t.id)} className="card card-hover" style={{ textAlign: 'left', position: 'relative' }}>
+              <div className="flex items-start justify-between mb-4"><div style={{ width: 38, height: 38, borderRadius: 12, background: (t.color || 'var(--coral)') + '22', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Folder size={16} color={t.color || 'var(--coral)'} /></div><div style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span role="button" tabIndex={0} aria-label="Generate team report" title="Generate team report" onClick={openTeamReport} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openTeamReport(e); }} style={{ width: 28, height: 28, borderRadius: 8, background: (t.color || 'var(--coral)') + '22', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = (t.color || 'var(--coral)') + '44'} onMouseLeave={e => e.currentTarget.style.background = (t.color || 'var(--coral)') + '22'}><FileText size={12} color={t.color || 'var(--coral)'} /></span><ChevronRight size={14} color="var(--muted)" /></div></div>
               <h3 className="display text-lg mb-1">{t.name}</h3>
               {t.description && <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>{t.description}</p>}
               <div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid var(--line)' }}>
@@ -2952,6 +3253,7 @@ function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAd
           <button onClick={() => setSelectedTeamId('all')} className="card card-hover" style={{ textAlign: 'left', background: 'var(--ink)', color: 'white', border: 'none' }}><div className="flex items-start justify-between mb-4"><div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={16} color="white" /></div><ChevronRight size={14} color="rgba(255,255,255,0.5)" /></div><h3 className="display text-lg mb-1">Everyone</h3><p className="text-xs mb-3" style={{ opacity: 0.7 }}>All team members</p><div className="flex items-center gap-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.12)' }}><div><p className="stat-num text-lg">{team.length}</p><p className="text-xs" style={{ opacity: 0.6 }}>total</p></div></div></button>
         </div>
         {teams.length === 0 && team.length === 0 && <div className="mt-5"><EmptyState title="Build your team" message="add your first teammate and let's get rolling!" action={onAddMember} actionLabel="Add member" mood="excited" /></div>}
+        {reportTeam && <TeamReportModal teamObj={reportTeam} team={team} teams={teams} tasks={tasks} clients={clients} posts={posts || []} comms={comms || []} igReports={igReports || []} strategies={strategies || []} onClose={() => setReportTeam(null)} />}
       </div>
     );
   }
@@ -3179,6 +3481,121 @@ function ToggleRow({ label, hint, checked, onChange }) {
       <p className="text-sm" style={{ margin: 0, flex: 1 }}>
         <strong>{label}</strong>{hint && <span style={{ color: 'var(--ink-soft)', fontWeight: 400 }}> {hint}</span>}
       </p>
+    </div>
+  );
+}
+
+// ====== TEAM REPORT MODAL ======
+function TeamReportModal({ teamObj, team, teams, tasks, clients, posts, comms, igReports, strategies, onClose }) {
+  const loadPref = (key, fallback) => { try { const v = localStorage.getItem('teamReportPref_' + key); return v == null ? fallback : JSON.parse(v); } catch { return fallback; } };
+  const savePref = (key, val) => { try { localStorage.setItem('teamReportPref_' + key, JSON.stringify(val)); } catch {} };
+
+  const [rangeKey, setRangeKey] = useState(loadPref('range', 'last30'));
+  const [customStart, setCustomStart] = useState(loadPref('customStart', ''));
+  const [customEnd, setCustomEnd] = useState(loadPref('customEnd', today()));
+  const [format, setFormat] = useState(loadPref('format', 'pdf'));
+
+  const todayDate = new Date();
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const { start, end, label } = (() => {
+    const t = new Date(todayDate);
+    if (rangeKey === 'today') return { start: ymd(t), end: ymd(t), label: 'Today' };
+    if (rangeKey === 'thisWeek') { const d = new Date(t); d.setDate(t.getDate() - t.getDay()); return { start: ymd(d), end: ymd(t), label: 'This week' }; }
+    if (rangeKey === 'last30') { const d = new Date(t); d.setDate(t.getDate() - 30); return { start: ymd(d), end: ymd(t), label: 'Last 30 days' }; }
+    if (rangeKey === 'thisMonth') return { start: `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-01`, end: ymd(t), label: 'This month' };
+    if (rangeKey === 'lastMonth') { const d = new Date(t.getFullYear(), t.getMonth() - 1, 1); const endD = new Date(t.getFullYear(), t.getMonth(), 0); return { start: ymd(d), end: ymd(endD), label: 'Last month' }; }
+    if (rangeKey === 'thisQuarter') { const q = Math.floor(t.getMonth() / 3); const d = new Date(t.getFullYear(), q * 3, 1); return { start: ymd(d), end: ymd(t), label: 'This quarter' }; }
+    if (rangeKey === 'thisYear') return { start: `${t.getFullYear()}-01-01`, end: ymd(t), label: 'This year' };
+    if (rangeKey === 'allTime') return { start: '2000-01-01', end: ymd(t), label: 'All time' };
+    return { start: customStart || '2000-01-01', end: customEnd || ymd(t), label: customStart && customEnd ? `${formatDate(customStart)} – ${formatDate(customEnd)}` : 'Custom' };
+  })();
+
+  // Preview counts
+  const teamMemberIds = team.filter(m => m.teamId === teamObj.id).map(m => m.id);
+  const scopedTasks = tasks.filter(t => {
+    if (!teamMemberIds.includes(t.assigneeId)) return false;
+    const d = (t.completedAt || t.assignedDate || t.createdAt || '').slice(0, 10);
+    return d >= start && d <= end;
+  });
+  const doneCount = scopedTasks.filter(t => t.status === 'done').length;
+
+  const handleSave = (key, val, setter) => { setter(val); savePref(key, val); };
+
+  const handleGenerate = () => {
+    if (scopedTasks.length === 0) { alert('No tasks in this range for this team. Try widening the date range.'); return; }
+    savePref('range', rangeKey); savePref('format', format);
+    if (rangeKey === 'custom') { savePref('customStart', customStart); savePref('customEnd', customEnd); }
+    const buildOpts = {
+      from: start, to: end,
+      includes: { tasks: true, posts: true, comms: true, team: true, instagram: true, strategy: true },
+      tasks, posts, comms, igReports, strategies, team, teams, clients,
+      teamFilter: teamObj.id,
+    };
+    if (format === 'pdf' || format === 'both') generateCustomBundlePDF(buildOpts);
+    if (format === 'excel' || format === 'both') exportCustomBundleExcel(buildOpts);
+    onClose();
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(58,45,45,0.3)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }} onClick={onClose}>
+      <div className="card scale-in" style={{ maxWidth: 540, width: '100%', maxHeight: '92vh', overflow: 'auto', padding: 22 }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-start gap-3 pb-4 mb-4" style={{ borderBottom: '1px solid var(--line)' }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: (teamObj.color || 'var(--coral)') + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><FileText size={16} color={teamObj.color || 'var(--coral)'} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 className="display" style={{ fontSize: '1.2rem', fontWeight: 500, margin: 0, lineHeight: 1.1 }}>Team report — {teamObj.name}</h2>
+            <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', margin: '2px 0 0' }}>scoped to this team's members only ✨</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', fontSize: 18, cursor: 'pointer', padding: 4, lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div className="mb-4">
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4 }}>TIME RANGE</p>
+          <div className="flex gap-1.5 flex-wrap mb-2">
+            {[
+              { id: 'today', label: 'Today' }, { id: 'thisWeek', label: 'This week' }, { id: 'last30', label: 'Last 30 days' },
+              { id: 'thisMonth', label: 'This month' }, { id: 'lastMonth', label: 'Last month' }, { id: 'thisQuarter', label: 'This quarter' },
+              { id: 'thisYear', label: 'This year' }, { id: 'allTime', label: 'All time' }, { id: 'custom', label: 'Custom...' },
+            ].map(p => <Pill key={p.id} label={p.label} active={rangeKey === p.id} onClick={() => handleSave('range', p.id, setRangeKey)} />)}
+          </div>
+          {rangeKey === 'custom' ? (
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <Field label="Start"><input type="date" className="input-field" value={customStart} onChange={e => handleSave('customStart', e.target.value, setCustomStart)} /></Field>
+              <Field label="End"><input type="date" className="input-field" value={customEnd} onChange={e => handleSave('customEnd', e.target.value, setCustomEnd)} /></Field>
+            </div>
+          ) : (
+            <p className="text-xs italic" style={{ color: 'var(--ink-soft)', margin: 0 }}>selected range: <strong>{formatDate(start)} → {formatDate(end)}</strong></p>
+          )}
+        </div>
+
+        <div className="mb-4">
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--ink-soft)', letterSpacing: 0.4 }}>FORMAT</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[{ id: 'pdf', emoji: '📄', label: 'PDF' }, { id: 'excel', emoji: '📊', label: 'Excel' }, { id: 'both', emoji: '📄📊', label: 'Both' }].map(f => (
+              <button key={f.id} onClick={() => handleSave('format', f.id, setFormat)} style={{
+                background: format === f.id ? 'var(--coral-soft)' : 'white',
+                border: `2px solid ${format === f.id ? 'var(--coral)' : 'var(--line)'}`,
+                color: format === f.id ? 'var(--coral-deep)' : 'var(--ink-soft)',
+                padding: 9, borderRadius: 10, fontSize: 12,
+                fontWeight: format === f.id ? 600 : 500,
+                cursor: 'pointer', textAlign: 'center', lineHeight: 1.4,
+              }}>{f.emoji}<br />{f.label}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-4 p-3" style={{ background: '#f9f5ee', borderLeft: '3px solid var(--coral)', borderRadius: 6 }}>
+          <p className="text-xs" style={{ color: 'var(--ink-soft)', margin: 0, lineHeight: 1.55 }}>
+            <strong>Preview:</strong> {teamObj.name} · {label} · {teamMemberIds.length} {teamMemberIds.length === 1 ? 'member' : 'members'} · {scopedTasks.length} tasks · {doneCount} done
+          </p>
+        </div>
+
+        <div className="flex gap-2 pt-4" style={{ borderTop: '1px solid var(--line)' }}>
+          <button onClick={onClose} className="btn-ghost" style={{ flex: 1 }}>Cancel</button>
+          <button onClick={handleGenerate} className="btn-primary" style={{ flex: 2 }} disabled={scopedTasks.length === 0}>
+            <Download size={13} /> Generate &amp; download
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
