@@ -2168,7 +2168,7 @@ function Dashboard({ user, membership }) {
         <main className="flex-1 min-h-screen" style={{ padding: '32px 40px', maxWidth: 1380 }}>
           {view === 'dashboard' && <DashboardView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} strategies={strategies} notes={notes} teamMessages={teamMessages} leaveRequests={leaveRequests} setView={setView} onQuickTask={() => setModal({ type: 'task' })} onQuickPost={() => setModal({ type: 'post' })} onSaveNote={async (n) => { await saveItem('notes', n); }} onDeleteNote={async (id) => { await removeItem('notes', id); }} userEmail={user.email} userId={user.id} onRefreshMessages={() => refetch('team_messages')} />}
           {view === 'tasks' && <TasksView tasks={tasks} team={team} teams={teams} clients={clients} toggleStatus={toggleTaskStatus} onAdd={() => setModal({ type: 'task' })} onEdit={(t) => setModal({ type: 'task', data: t })} />}
-          {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} clients={clients} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} />}
+          {view === 'team' && <TeamView team={team} teams={teams} tasks={tasks} clients={clients} onAddMember={() => setModal({ type: 'member' })} onEditMember={(m) => setModal({ type: 'member', data: m })} onAddTeam={() => setModal({ type: 'teamFolder' })} onEditTeam={(t) => setModal({ type: 'teamFolder', data: t })} onAddTask={(memberId) => setModal({ type: 'task', data: { assigneeId: memberId } })} onEditTask={(t) => setModal({ type: 'task', data: t })} onQuickStatus={(taskId, status) => upsertItem('tasks', { id: taskId, status, completedAt: status === 'done' ? new Date().toISOString() : null }, user.id, workspaceId)} onDeleteTask={async (taskId) => { if (!confirm('Delete this task?')) return; await supabase.from('tasks').delete().eq('id', taskId); refetch('tasks'); }} />}
           {view === 'clients' && <ClientsView clients={clients} comms={comms} tasks={tasks} posts={posts} briefs={briefs} attachments={clientAttachments} workspaceId={workspaceId} userId={user.id} onRefreshAttachments={() => refetch('client_attachments')} onAdd={() => setModal({ type: 'client' })} onEdit={(c) => setModal({ type: 'client', data: c })} onLog={(c) => setModal({ type: 'comm', data: { clientId: c.id } })} onEditBrief={(c) => setModal({ type: 'brief', data: { client: c, brief: briefs.find(b => b.clientId === c.id) } })} onAddPost={(date, clientId) => setModal({ type: 'post', data: { scheduledDate: date || '', clientId: clientId || '' } })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'calendar' && <CalendarView posts={posts} clients={clients} updateStatus={updatePostStatus} onAdd={(date) => setModal({ type: 'post', data: date ? { scheduledDate: date } : undefined })} onEdit={(p) => setModal({ type: 'post', data: p })} />}
           {view === 'reports' && <ReportsView tasks={tasks} team={team} teams={teams} clients={clients} posts={posts} comms={comms} igReports={igReports} strategies={strategies} onAddIgReport={() => setModal({ type: 'igReport' })} onImportIg={() => setModal({ type: 'igImport' })} onEditIgReport={(r) => setModal({ type: 'igReport', data: r })} onEditPost={(p) => setModal({ type: 'post', data: p })} />}
@@ -2876,9 +2876,33 @@ function TaskRow({ task, team, teams, clients, compact, onClick, onStatusChange 
   );
 }
 
-function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAddTeam, onEditTeam }) {
+function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAddTeam, onEditTeam, onAddTask, onEditTask, onQuickStatus, onDeleteTask }) {
   const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const [selectedMemberId, setSelectedMemberId] = useState(null);
   const sortedTeams = [...teams].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+  // If a member is selected, show their profile (regardless of team filter)
+  if (selectedMemberId) {
+    const member = team.find(m => m.id === selectedMemberId);
+    if (!member) {
+      // Member was deleted or doesn't exist — bounce back
+      setSelectedMemberId(null);
+      return null;
+    }
+    return <MemberProfile
+      member={member}
+      memberTeam={teams.find(t => t.id === member.teamId)}
+      tasks={tasks.filter(t => t.assigneeId === member.id)}
+      clients={clients}
+      onBack={() => setSelectedMemberId(null)}
+      onEditMember={() => onEditMember(member)}
+      onAddTask={() => onAddTask(member.id)}
+      onEditTask={onEditTask}
+      onQuickStatus={onQuickStatus}
+      onDeleteTask={onDeleteTask}
+    />;
+  }
+
   if (selectedTeamId === null) {
     return (
       <div className="fade-in">
@@ -2913,7 +2937,7 @@ function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAd
       {members.length === 0 ? <EmptyState title="No members yet" message="add the first person to this crew!" action={onAddMember} actionLabel="Add member" mood="happy" /> : (
         <div className="grid grid-cols-3 gap-3">
           {members.map(m => { const memberTasks = tasks.filter(t => t.assigneeId === m.id); const active = memberTasks.filter(t => t.status !== 'done').length; const done = memberTasks.filter(t => t.status === 'done').length; const memberTeam = teams.find(t => t.id === m.teamId); const avatarBg = memberTeam?.color || 'var(--coral)'; const periodTasks = memberTasks.filter(t => isInPeriod(t.createdAt, 'month')); const dlPDF = (e) => { e.stopPropagation(); generateMemberReportPDF(m, memberTeam, periodTasks, clients || [], 'Last 30 days'); }; const dlExcel = (e) => { e.stopPropagation(); exportMemberReportExcel(m, memberTeam, periodTasks, clients || [], 'Last 30 days'); }; return (
-            <button key={m.id} onClick={() => onEditMember(m)} className="card card-hover" style={{ textAlign: 'left', position: 'relative' }}>
+            <button key={m.id} onClick={() => setSelectedMemberId(m.id)} className="card card-hover" style={{ textAlign: 'left', position: 'relative' }}>
               <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
                 <span role="button" tabIndex={0} aria-label="Download PDF report" title="Download PDF · last 30 days" onClick={dlPDF} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') dlPDF(e); }} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--coral-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--coral)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--coral-soft)'}><FileText size={12} color="var(--coral-deep)" /></span>
                 <span role="button" tabIndex={0} aria-label="Download Excel report" title="Download Excel · last 30 days" onClick={dlExcel} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') dlExcel(e); }} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--sage-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--sage)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--sage-soft)'}><FileSpreadsheet size={12} color="#5a8068" /></span>
@@ -2931,6 +2955,240 @@ function TeamView({ team, teams, tasks, clients, onAddMember, onEditMember, onAd
               </div>
             </button>
           ); })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ====== MEMBER PROFILE ======
+function MemberProfile({ member, memberTeam, tasks, clients, onBack, onEditMember, onAddTask, onEditTask, onQuickStatus, onDeleteTask }) {
+  const [tab, setTab] = useState('tasks');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [openMenu, setOpenMenu] = useState(null);
+  const avatarBg = memberTeam?.color || 'var(--coral)';
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!openMenu) return;
+    const close = () => setOpenMenu(null);
+    setTimeout(() => document.addEventListener('click', close), 0);
+    return () => document.removeEventListener('click', close);
+  }, [openMenu]);
+
+  // Filter tasks
+  const counts = {
+    all: tasks.length,
+    progress: tasks.filter(t => t.status === 'progress').length,
+    todo: tasks.filter(t => t.status === 'todo').length,
+    done: tasks.filter(t => t.status === 'done').length,
+  };
+  let filtered = tasks;
+  if (statusFilter !== 'all') filtered = tasks.filter(t => t.status === statusFilter);
+
+  // Split active vs done for the All view
+  const active = filtered.filter(t => t.status !== 'done').sort((a, b) => {
+    // Active: by due date asc (no date → end)
+    const ad = a.dueDate || '9999-12-31', bd = b.dueDate || '9999-12-31';
+    return ad.localeCompare(bd);
+  });
+  const done = filtered.filter(t => t.status === 'done').sort((a, b) => {
+    // Done: most recent first
+    const ad = a.completedAt || a.assignedDate || '', bd = b.completedAt || b.assignedDate || '';
+    return bd.localeCompare(ad);
+  });
+
+  return (
+    <div className="fade-in">
+      <button onClick={onBack} className="btn-ghost mb-4"><ChevronLeft size={13} /> Back to team</button>
+
+      {/* Header */}
+      <div className="flex items-start gap-4 pb-4 mb-5" style={{ borderBottom: '1px solid var(--line)' }}>
+        <div style={{ width: 64, height: 64, borderRadius: 18, background: avatarBg + '22', color: avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Fraunces', serif", fontSize: 28, fontWeight: 500, flexShrink: 0 }}>{member.name[0]?.toUpperCase()}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h2 className="display" style={{ fontSize: '1.5rem', fontWeight: 500, margin: 0, lineHeight: 1.1 }}>{member.name}</h2>
+          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1rem', margin: '2px 0 0' }}>{member.role || 'Team member'}{memberTeam ? ` · ${memberTeam.name} ✨` : ' ✨'}</p>
+          <div className="flex flex-wrap gap-3 mt-2" style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+            {member.email && <span>📧 {member.email}</span>}
+            {member.whatsapp && <span style={{ color: '#25D366' }}>💬 {member.whatsapp}</span>}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onEditMember} className="btn-ghost" style={{ fontSize: 12 }}><Edit2 size={12} /> Edit info</button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--line)', marginBottom: 18 }}>
+        {[
+          { id: 'tasks', label: `Tasks${counts.all ? ` (${counts.all})` : ''}`, icon: '✓' },
+          { id: 'overview', label: 'Overview', icon: '📊' },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            background: 'transparent', border: 'none',
+            padding: '8px 14px', borderBottom: tab === t.id ? '2px solid var(--coral)' : '2px solid transparent',
+            marginBottom: -1, color: tab === t.id ? 'var(--coral-deep)' : 'var(--ink-soft)',
+            fontSize: 12.5, fontWeight: tab === t.id ? 600 : 500, cursor: 'pointer'
+          }}>
+            <span style={{ marginRight: 4 }}>{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'tasks' && (
+        <div>
+          {/* Filter pills + actions */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <Pill label={`All (${counts.all})`} active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
+            <Pill label={`In progress (${counts.progress})`} active={statusFilter === 'progress'} onClick={() => setStatusFilter('progress')} />
+            <Pill label={`To do (${counts.todo})`} active={statusFilter === 'todo'} onClick={() => setStatusFilter('todo')} />
+            <Pill label={`Done (${counts.done})`} active={statusFilter === 'done'} onClick={() => setStatusFilter('done')} />
+            <div style={{ marginLeft: 'auto' }}>
+              <button onClick={onAddTask} className="btn-primary" style={{ padding: '6px 14px', fontSize: 12 }}><Plus size={12} /> New task</button>
+            </div>
+          </div>
+
+          {filtered.length === 0 ? (
+            <EmptyState title="No tasks here" message={statusFilter === 'all' ? `${member.name} doesn't have any tasks yet — assign the first one!` : `Nothing matches the "${statusFilter}" filter.`} action={statusFilter === 'all' ? onAddTask : undefined} actionLabel={statusFilter === 'all' ? 'Add task' : undefined} mood="happy" />
+          ) : (
+            <>
+              {/* Active tasks (in progress + to do) — shown when filter is 'all' */}
+              {statusFilter === 'all' && active.length > 0 && active.map(t => <MemberTaskRow key={t.id} task={t} clients={clients} onEditTask={onEditTask} onQuickStatus={onQuickStatus} onDeleteTask={onDeleteTask} openMenu={openMenu} setOpenMenu={setOpenMenu} />)}
+
+              {statusFilter === 'all' && done.length > 0 && (
+                <p style={{ fontSize: 10.5, color: 'var(--muted)', letterSpacing: 0.4, fontWeight: 600, margin: '14px 0 6px' }}>RECENTLY DONE</p>
+              )}
+
+              {statusFilter === 'all' && done.length > 0 && done.slice(0, 10).map(t => <MemberTaskRow key={t.id} task={t} clients={clients} onEditTask={onEditTask} onQuickStatus={onQuickStatus} onDeleteTask={onDeleteTask} openMenu={openMenu} setOpenMenu={setOpenMenu} />)}
+
+              {statusFilter === 'all' && done.length > 10 && (
+                <p className="hand text-center" style={{ color: 'var(--coral-deep)', fontSize: '0.95rem', margin: '10px 0 0' }}>+{done.length - 10} older done tasks — switch to the Done filter to see all ✨</p>
+              )}
+
+              {/* Filtered single view */}
+              {statusFilter !== 'all' && filtered.map(t => <MemberTaskRow key={t.id} task={t} clients={clients} onEditTask={onEditTask} onQuickStatus={onQuickStatus} onDeleteTask={onDeleteTask} openMenu={openMenu} setOpenMenu={setOpenMenu} />)}
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === 'overview' && (
+        <MemberOverview member={member} tasks={tasks} clients={clients} />
+      )}
+    </div>
+  );
+}
+
+function MemberTaskRow({ task, clients, onEditTask, onQuickStatus, onDeleteTask, openMenu, setOpenMenu }) {
+  const client = clients.find(c => c.id === task.clientId);
+  const status = STATUS_COLORS[task.status] || {};
+  const isDone = task.status === 'done';
+  const overdue = !isDone && task.dueDate && task.dueDate < today();
+  const borderColor = isDone ? 'var(--sage)' : task.status === 'progress' ? '#d4a652' : 'var(--coral-soft)';
+  return (
+    <div
+      onClick={() => onEditTask(task)}
+      style={{
+        background: isDone ? 'var(--bg-warmer)' : 'white',
+        border: '1px solid var(--line)',
+        borderLeft: `3px solid ${borderColor}`,
+        borderRadius: 10,
+        padding: '11px 14px',
+        marginBottom: 6,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        cursor: 'pointer',
+        opacity: isDone ? 0.78 : 1,
+        position: 'relative',
+        transition: 'all 0.12s',
+      }}
+      className="card-hover"
+    >
+      <input
+        type="checkbox"
+        checked={isDone}
+        onClick={e => e.stopPropagation()}
+        onChange={e => { e.stopPropagation(); onQuickStatus(task.id, isDone ? 'todo' : 'done'); }}
+        style={{ width: 16, height: 16, accentColor: 'var(--sage)', cursor: 'pointer', flexShrink: 0 }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, margin: 0, lineHeight: 1.3, textDecoration: isDone ? 'line-through' : 'none', color: isDone ? 'var(--ink-soft)' : 'var(--ink)' }}>{task.title}</p>
+        <p style={{ fontSize: 11, color: 'var(--ink-soft)', margin: '3px 0 0' }}>
+          {client?.name || 'No client'}
+          {task.dueDate && !isDone && ` · due ${formatDate(task.dueDate)}`}
+          {isDone && task.completedAt && ` · completed ${formatDate(task.completedAt)}`}
+          {isDone && !task.completedAt && task.assignedDate && ` · ${formatDate(task.assignedDate)}`}
+        </p>
+      </div>
+      {overdue && <span className="badge" style={{ background: 'var(--pink-soft)', color: 'var(--pink)', fontWeight: 600 }}>Overdue</span>}
+      <span className="badge" style={{ background: status.bg, color: status.text, fontWeight: 600 }}>{status.label || task.status}</span>
+      <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+        <button onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === task.id ? null : task.id); }} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', fontSize: 18, padding: '4px 6px', cursor: 'pointer', lineHeight: 1 }}>⋮</button>
+        {openMenu === task.id && (
+          <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: 'white', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 6px 24px rgba(58,45,45,0.12)', padding: 4, minWidth: 160, zIndex: 50 }}>
+            <button onClick={() => { onEditTask(task); setOpenMenu(null); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', background: 'transparent', border: 'none', fontSize: 12, color: 'var(--ink)', cursor: 'pointer', borderRadius: 6 }}>✏️ Edit details</button>
+            {task.status !== 'progress' && <button onClick={() => { onQuickStatus(task.id, 'progress'); setOpenMenu(null); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', background: 'transparent', border: 'none', fontSize: 12, color: 'var(--ink)', cursor: 'pointer', borderRadius: 6 }}>⏱ Mark in progress</button>}
+            {task.status !== 'todo' && <button onClick={() => { onQuickStatus(task.id, 'todo'); setOpenMenu(null); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', background: 'transparent', border: 'none', fontSize: 12, color: 'var(--ink)', cursor: 'pointer', borderRadius: 6 }}>○ Mark to do</button>}
+            {task.status !== 'done' && <button onClick={() => { onQuickStatus(task.id, 'done'); setOpenMenu(null); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', background: 'transparent', border: 'none', fontSize: 12, color: 'var(--ink)', cursor: 'pointer', borderRadius: 6 }}>✓ Mark done</button>}
+            <div style={{ height: 1, background: 'var(--line)', margin: '4px 0' }}></div>
+            <button onClick={() => { onDeleteTask(task.id); setOpenMenu(null); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', background: 'transparent', border: 'none', fontSize: 12, color: 'var(--pink)', cursor: 'pointer', borderRadius: 6 }}>🗑 Delete</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MemberOverview({ member, tasks, clients }) {
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const lastMonth = (() => { const d = new Date(now); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })();
+
+  const doneThisMonth = tasks.filter(t => t.status === 'done' && (t.completedAt || t.assignedDate || '').startsWith(thisMonth)).length;
+  const doneLastMonth = tasks.filter(t => t.status === 'done' && (t.completedAt || t.assignedDate || '').startsWith(lastMonth)).length;
+  const lifetimeDone = tasks.filter(t => t.status === 'done').length;
+  const currentlyActive = tasks.filter(t => t.status !== 'done').length;
+
+  // By client
+  const byClient = {};
+  tasks.forEach(t => {
+    if (!t.clientId) return;
+    if (!byClient[t.clientId]) byClient[t.clientId] = { total: 0, done: 0 };
+    byClient[t.clientId].total++;
+    if (t.status === 'done') byClient[t.clientId].done++;
+  });
+  const clientList = Object.entries(byClient).map(([cid, stats]) => ({ client: clients.find(c => c.id === cid), ...stats })).filter(x => x.client).sort((a, b) => b.total - a.total).slice(0, 8);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-4 gap-3">
+        <div className="card"><p className="stat-num text-2xl" style={{ color: 'var(--coral)' }}>{currentlyActive}</p><p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Active now</p></div>
+        <div className="card"><p className="stat-num text-2xl" style={{ color: 'var(--sage)' }}>{doneThisMonth}</p><p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Done this month</p></div>
+        <div className="card"><p className="stat-num text-2xl" style={{ color: 'var(--lavender)' }}>{doneLastMonth}</p><p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Done last month</p></div>
+        <div className="card"><p className="stat-num text-2xl" style={{ color: 'var(--gold)' }}>{lifetimeDone}</p><p className="text-xs" style={{ color: 'var(--ink-soft)' }}>Done all-time</p></div>
+      </div>
+
+      {clientList.length > 0 && (
+        <div className="card">
+          <h3 className="display text-lg mb-3">By client</h3>
+          <div className="space-y-2">
+            {clientList.map(({ client, total, done }) => (
+              <div key={client.id} className="flex items-center gap-3 py-2" style={{ borderBottom: '1px solid var(--line)' }}>
+                <p className="text-sm font-medium" style={{ flex: 1, margin: 0 }}>{client.name}</p>
+                <div style={{ width: 120, height: 4, background: 'var(--line)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ width: total > 0 ? `${(done / total) * 100}%` : '0%', height: '100%', background: 'var(--sage)' }}></div>
+                </div>
+                <span className="text-xs" style={{ color: 'var(--ink-soft)', minWidth: 60, textAlign: 'right' }}>{done} / {total} done</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {clientList.length === 0 && (
+        <div className="card text-center py-6">
+          <p className="hand" style={{ color: 'var(--coral-deep)', fontSize: '1.05rem' }}>no client breakdown yet — assign some tasks to start tracking ✨</p>
         </div>
       )}
     </div>
